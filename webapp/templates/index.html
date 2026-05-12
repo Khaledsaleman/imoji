@@ -2,175 +2,268 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>محرر المنشورات الاحترافي</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --tg-color-primary: #2481cc;
+            --tg-color-secondary: #50a2e9;
+            --tg-color-bg: #ffffff;
+            --tg-color-text: #000000;
+            --tg-color-hint: #999999;
+            --tg-color-button: #2481cc;
+            --tg-color-button-text: #ffffff;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background-color: var(--tg-theme-bg-color, #ffffff);
+            font-family: 'Tajawal', sans-serif;
+            background-color: var(--tg-theme-bg-color, #f0f2f5);
             color: var(--tg-theme-text-color, #000000);
-            padding: 20px;
-            margin: 0;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
-        .container {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+
+        .glass-panel {
+            background: rgba(var(--tg-theme-secondary-bg-color-rgb, 255, 255, 255), 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 24px;
         }
-        textarea {
-            width: 100%;
-            height: 120px;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            box-sizing: border-box;
-            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
-            color: var(--tg-theme-text-color);
+
+        .dark .glass-panel {
+            background: rgba(30, 30, 30, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .group-list {
-            display: flex;
-            overflow-x: auto;
-            gap: 10px;
-            padding: 10px 0;
+
+        .gradient-text {
+            background: linear-gradient(135deg, #2481cc 0%, #50a2e9 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        .group-item {
-            min-width: 80px;
-            text-align: center;
-            cursor: pointer;
-            padding: 10px;
-            background: #eee;
-            border-radius: 8px;
-            font-size: 12px;
+
+        .fade-in-contrast {
+            animation: fadeInContrast 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
-        .group-item.active {
+
+        @keyframes fadeInContrast {
+            from {
+                opacity: 0;
+                filter: contrast(1.5) brightness(1.2);
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                filter: contrast(1) brightness(1);
+                transform: translateY(0);
+            }
+        }
+
+        .emoji-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .emoji-card:active {
+            transform: scale(0.92);
             background: var(--tg-theme-button-color, #2481cc);
             color: white;
         }
-        .emoji-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(45px, 1fr));
-            gap: 10px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            max-height: 200px;
-            overflow-y: auto;
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
         }
-        .emoji-item {
-            cursor: pointer;
-            text-align: center;
-            font-size: 24px;
-            padding: 5px;
-            border-radius: 4px;
-            background: #f9f9f9;
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
         }
-        .emoji-item:hover {
-            background: #eee;
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
         }
-        .btn {
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            background-color: var(--tg-theme-button-color, #2481cc);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .secondary-btn {
-            background-color: #6c757d;
-        }
-        .preview-box {
-            border: 1px dashed #aaa;
-            padding: 10px;
-            border-radius: 8px;
-            min-height: 50px;
-            white-space: pre-wrap;
-            background: rgba(0,0,0,0.05);
-        }
-        .scheduling {
-            border: 1px solid #ddd;
-            padding: 10px;
-            border-radius: 8px;
-        }
-        .json-section { display: none; margin-top: 10px; }
+
+        /* Telegram Theme Colors Mapping */
+        .bg-tg-main { background-color: var(--tg-theme-bg-color); }
+        .bg-tg-secondary { background-color: var(--tg-theme-secondary-bg-color); }
+        .text-tg-main { color: var(--tg-theme-text-color); }
+        .text-tg-hint { color: var(--tg-theme-hint-color); }
+        .border-tg { border-color: rgba(var(--tg-theme-hint-color-rgb, 153, 153, 153), 0.2); }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h3>محرر المنشورات 🎨</h3>
-
-        <textarea id="post-text" placeholder="اكتب نص المنشور هنا...">{{ post.text if post else '' }}</textarea>
-
-        <div id="preview-area" class="preview-box">معاينة المنشور ستظهر هنا...</div>
-
-        <h4>اختر مجموعة إيموجي</h4>
-        <div class="group-list">
-            {% for group_name, data in emoji_groups.items() %}
-            <div class="group-item" id="group-{{ loop.index0 }}" onclick="showGroup('{{ group_name }}', {{ loop.index0 }})">
-                <div style="font-size: 20px;">{{ data.preview }}</div>
-                <div>{{ group_name }}</div>
+<body class="p-4 md:p-6 bg-tg-main">
+    <div class="max-w-md mx-auto space-y-6 fade-in-contrast">
+        <!-- Header -->
+        <header class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                    <span class="text-2xl">🎨</span>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-tg-main">محرر المنشورات</h1>
+                    <p class="text-xs text-tg-hint">نسخة احترافية v2.0</p>
+                </div>
             </div>
-            {% endfor %}
+            <div class="text-tg-hint hover:text-tg-main transition-colors cursor-pointer" onclick="tg.close()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </div>
+        </header>
+
+        <!-- Editor Section -->
+        <div class="glass-panel p-5 space-y-4 shadow-sm border-tg">
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-bold text-tg-main">محتوى المنشور</span>
+                <span id="char-count" class="text-xs text-tg-hint">0 حرف</span>
+            </div>
+            <textarea
+                id="post-text"
+                class="w-100 w-full h-40 bg-transparent text-tg-main placeholder-tg-hint focus:outline-none resize-none text-base leading-relaxed custom-scrollbar"
+                placeholder="اكتب فكرتك هنا..."></textarea>
+
+            <div id="preview-area" class="hidden p-3 rounded-xl bg-black/5 dark:bg-white/5 text-sm text-tg-main whitespace-pre-wrap border border-dashed border-tg">
+                <!-- Preview content -->
+            </div>
         </div>
 
-        <div id="emoji-display" class="emoji-grid" style="display: none;">
-            <!-- Emojis will be loaded here -->
+        <!-- Emoji Groups Grid -->
+        <section class="space-y-4">
+            <h2 class="text-sm font-bold text-tg-main mr-2">مجموعات الإيموجي المميزة</h2>
+            <div class="grid grid-cols-2 gap-3">
+                {% for group_name, data in emoji_groups.items() %}
+                <button
+                    onclick="showGroup('{{ group_name }}', {{ loop.index0 }})"
+                    id="group-{{ loop.index0 }}"
+                    class="group-item glass-panel p-4 flex flex-col items-center gap-2 hover:scale-[1.02] transition-transform duration-200 border-tg active:scale-95 text-center">
+                    <span class="text-3xl mb-1 drop-shadow-md">{{ data.preview }}</span>
+                    <span class="text-xs font-medium text-tg-main truncate w-full">{{ group_name }}</span>
+                </button>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Emoji Display Area (Hidden by default) -->
+        <div id="emoji-container" class="hidden fade-in-contrast">
+            <div class="glass-panel p-4 space-y-4 border-tg border-blue-500/30">
+                <div class="flex items-center justify-between border-b border-tg pb-3">
+                    <span id="active-group-name" class="text-sm font-bold text-tg-main truncate max-w-[200px]">المجموعة المختارة</span>
+                    <button onclick="hideEmojis()" class="text-xs text-blue-500 font-bold px-2 py-1">إخفاء</button>
+                </div>
+                <div id="emoji-display" class="grid grid-cols-5 gap-3 max-h-48 overflow-y-auto custom-scrollbar p-1">
+                    <!-- Emojis will be loaded here -->
+                </div>
+            </div>
         </div>
 
-        <div class="scheduling">
-            <label>جدولة المنشور (اختياري):</label>
-            <input type="datetime-local" id="schedule-time" style="width: 100%; padding: 8px; margin-top: 5px;">
+        <!-- Scheduling -->
+        <div class="glass-panel p-5 space-y-4 border-tg">
+            <div class="flex items-center gap-2 text-tg-main">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-sm font-bold">جدولة المنشور</span>
+            </div>
+            <input
+                type="datetime-local"
+                id="schedule-time"
+                class="w-full bg-black/5 dark:bg-white/5 rounded-xl p-3 text-sm text-tg-main focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all border-tg">
         </div>
 
-        <button class="btn secondary-btn" onclick="toggleJson()">إدخال JSON يدوي</button>
-
-        <div id="json-section" class="json-section">
-            <textarea id="manual-json" style="height: 80px;"></textarea>
-            <button class="btn" onclick="applyManualJson()" style="width: 100%; margin-top: 5px;">تطبيق JSON</button>
+        <!-- Actions -->
+        <div class="grid grid-cols-2 gap-4 pb-8">
+            <button
+                onclick="saveDraft()"
+                class="bg-tg-secondary/10 text-blue-500 font-bold py-4 rounded-2xl border border-blue-500/20 active:scale-95 transition-transform">
+                حفظ مسودة
+            </button>
+            <button
+                onclick="publishNow()"
+                class="bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/30 active:scale-95 transition-transform">
+                نشر الآن 🚀
+            </button>
         </div>
+    </div>
 
-        <button class="btn" onclick="saveDraft()">حفظ المسودة 💾</button>
-        <button class="btn" onclick="publishNow()" style="background-color: #28a745;">نشر الآن 🚀</button>
+    <!-- JSON Section (Hidden for advanced users) -->
+    <div class="max-w-md mx-auto pb-12">
+        <button onclick="toggleJson()" class="text-xs text-tg-hint underline w-full text-center">إعدادات متقدمة (JSON)</button>
+        <div id="json-section" class="hidden mt-4 glass-panel p-4 space-y-3">
+            <textarea id="manual-json" class="w-full h-32 bg-black/5 dark:bg-white/5 rounded-lg p-3 text-xs font-mono text-tg-main focus:outline-none"></textarea>
+            <button onclick="applyManualJson()" class="w-full py-2 bg-tg-main text-tg-main border border-tg rounded-lg text-xs font-bold">تطبيق</button>
+        </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
+        tg.ready();
+
+        // Enable Dark Mode based on Telegram Theme
+        if (tg.colorScheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        }
 
         let entities = [];
         const postId = new URLSearchParams(window.location.search).get('post_id');
         const emojiGroups = {{ emoji_groups | tojson }};
 
+        // Initialize state
         try {
+            const initialText = '{{ post.text if post else "" }}';
             const initialEntities = '{{ post.entities_json | safe if post and post.entities_json else "[]" }}';
+            document.getElementById('post-text').value = initialText;
             entities = JSON.parse(initialEntities);
-            updatePreview();
+            updateCharCount();
         } catch(e) { console.error(e); }
 
         function showGroup(groupName, index) {
+            const container = document.getElementById('emoji-container');
             const display = document.getElementById('emoji-display');
-            display.style.display = 'grid';
+            const nameEl = document.getElementById('active-group-name');
+
+            nameEl.innerText = groupName;
             display.innerHTML = '';
 
             // Highlight active group
-            document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
-            document.getElementById('group-' + index).classList.add('active');
+            document.querySelectorAll('.group-item').forEach(el => el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/10'));
+            const activeGroup = document.getElementById('group-' + index);
+            activeGroup.classList.add('ring-2', 'ring-blue-500', 'bg-blue-500/10');
 
             const group = emojiGroups[groupName];
             group.emojis.forEach(emoji => {
-                const div = document.createElement('div');
-                div.className = 'emoji-item';
-                div.innerText = emoji.text;
-                div.onclick = () => insertEmoji(emoji.custom_emoji_id, emoji.text);
-                display.appendChild(div);
+                const btn = document.createElement('button');
+                btn.className = 'emoji-card h-12 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 text-2xl hover:bg-blue-500/20 active:bg-blue-500';
+                btn.innerText = emoji.text;
+                btn.onclick = () => insertEmoji(emoji.custom_emoji_id, emoji.text);
+                display.appendChild(btn);
             });
+
+            container.classList.remove('hidden');
+            container.classList.add('fade-in-contrast');
+
+            // Scroll to container
+            container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function hideEmojis() {
+            document.getElementById('emoji-container').classList.add('hidden');
+            document.querySelectorAll('.group-item').forEach(el => el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/10'));
         }
 
         function insertEmoji(emojiId, emojiText) {
             const textarea = document.getElementById('post-text');
             const start = textarea.selectionStart;
             const text = textarea.value;
+
+            // Shift existing entities that are after the insertion point
+            entities.forEach(entity => {
+                if (entity.offset >= start) {
+                    entity.offset += emojiText.length;
+                }
+            });
 
             textarea.value = text.substring(0, start) + emojiText + text.substring(start);
 
@@ -181,20 +274,26 @@
                 custom_emoji_id: emojiId
             });
 
-            updatePreview();
+            updateCharCount();
+            tg.HapticFeedback.impactOccurred('light');
+
+            // Set focus back to textarea and restore cursor position
+            textarea.focus();
+            const newCursorPos = start + emojiText.length;
+            textarea.setSelectionRange(newCursorPos, newCursorPos);
         }
 
-        function updatePreview() {
+        function updateCharCount() {
             const text = document.getElementById('post-text').value;
-            document.getElementById('preview-area').innerText = text;
+            document.getElementById('char-count').innerText = text.length + " حرف";
             document.getElementById('manual-json').value = JSON.stringify({entities: entities}, null, 2);
         }
 
-        document.getElementById('post-text').addEventListener('input', updatePreview);
+        document.getElementById('post-text').addEventListener('input', updateCharCount);
 
         function toggleJson() {
             const section = document.getElementById('json-section');
-            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+            section.classList.toggle('hidden');
         }
 
         function applyManualJson() {
@@ -202,7 +301,7 @@
                 const data = JSON.parse(document.getElementById('manual-json').value);
                 if(data.entities) {
                     entities = data.entities;
-                    updatePreview();
+                    tg.showScanQrPopup({text: "تم تطبيق الإعدادات بنجاح"}); // Not really QR but just to use TG API
                 }
             } catch(e) { tg.showAlert("خطأ في صيغة JSON"); }
         }
@@ -219,26 +318,41 @@
         }
 
         async function saveDraft() {
+            tg.MainButton.showProgress();
             const text = document.getElementById('post-text').value;
             const schedule = document.getElementById('schedule-time').value;
-            const response = await apiRequest('/save_post', {
-                post_id: postId,
-                text: text,
-                entities: entities,
-                scheduled_at: schedule
-            });
-            const res = await response.json();
-            if(res.status === 'success') tg.showAlert("تم حفظ المسودة بنجاح!");
+
+            try {
+                const response = await apiRequest('/save_post', {
+                    post_id: postId,
+                    text: text,
+                    entities: entities,
+                    scheduled_at: schedule
+                });
+                const res = await response.json();
+                if(res.status === 'success') {
+                    tg.HapticFeedback.notificationOccurred('success');
+                    tg.showAlert("تم حفظ المسودة بنجاح! ✨");
+                }
+            } catch(e) {
+                tg.showAlert("حدث خطأ أثناء الحفظ");
+            } finally {
+                tg.MainButton.hideProgress();
+            }
         }
 
         async function publishNow() {
-            tg.showConfirm("هل أنت متأكد من النشر؟", async (ok) => {
+            tg.showConfirm("هل أنت متأكد من رغبتك في نشر المنشور الآن؟", async (ok) => {
                 if(ok) {
                     await saveDraft();
                     const response = await apiRequest('/publish_now', { post_id: postId });
                     const res = await response.json();
-                    if(res.status === 'success') tg.close();
-                    else tg.showAlert("فشل النشر: " + res.message);
+                    if(res.status === 'success') {
+                        tg.HapticFeedback.notificationOccurred('success');
+                        tg.close();
+                    } else {
+                        tg.showAlert("فشل النشر: " + res.message);
+                    }
                 }
             });
         }
