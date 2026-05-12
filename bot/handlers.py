@@ -35,26 +35,25 @@ async def cmd_config(message: types.Message, is_owner: bool = False):
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message, is_admin: bool = False):
-    if not is_admin:
-        await message.answer("مرحباً بك. هذا البوت مخصص لإدارة القنوات والنشر الاحترافي.")
-        return
+    try:
+        webapp_url = get_webapp_url()
 
-    webapp_url = get_webapp_url()
+        kb = []
+        if webapp_url:
+            kb.append([InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=webapp_url))])
+        else:
+            kb.append([InlineKeyboardButton(text="⚠️ يرجى ضبط رابط الـ WebApp أولاً", callback_data="webapp_error")])
 
-    kb = []
-    if webapp_url:
-        kb.append([InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=webapp_url))])
-    else:
-        kb.append([InlineKeyboardButton(text="⚠️ يرجى ضبط رابط الـ WebApp أولاً", callback_data="webapp_error")])
+        kb.append([InlineKeyboardButton(text="إعدادات القنوات 📺", callback_data="settings_channels")])
+        kb.append([InlineKeyboardButton(text="إدارة الأدمنز 👥", callback_data="settings_admins")])
 
-    kb.append([InlineKeyboardButton(text="إعدادات القنوات 📺", callback_data="settings_channels")])
-    kb.append([InlineKeyboardButton(text="إدارة الأدمنز 👥", callback_data="settings_admins")])
+        msg = "أهلاً بك في لوحة التحكم!"
+        if not webapp_url:
+            msg += "\n\n⚠️ **تنبيه:** لم يتم ضبط رابط الـ WebApp بشكل صحيح في إعدادات Render. يرجى مراجعة ملف التعليمات RENDER_GUIDE_AR.md"
 
-    msg = "أهلاً بك في لوحة التحكم!"
-    if not webapp_url:
-        msg += "\n\n⚠️ **تنبيه:** لم يتم ضبط رابط الـ WebApp بشكل صحيح في إعدادات Render. يرجى مراجعة ملف التعليمات RENDER_GUIDE_AR.md"
-
-    await message.answer(msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        await message.answer(msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    except Exception as e:
+        await message.answer(f"❌ حدث خطأ أثناء تشغيل البوت: {e}")
 
 @router.callback_query(F.data == "webapp_error")
 async def webapp_error(callback: types.CallbackQuery):
@@ -91,8 +90,12 @@ async def handle_post_content(message: types.Message, is_admin: bool = False):
         await session.commit()
         await session.refresh(new_post)
 
-    webapp_url = f"{get_webapp_url()}?post_id={new_post.id}"
-    kb = [[InlineKeyboardButton(text="تعديل المنشور في WebApp 🎨", web_app=WebAppInfo(url=webapp_url))]]
+    url_base = get_webapp_url()
+    webapp_url = f"{url_base}?post_id={new_post.id}" if url_base else None
+
+    kb = []
+    if webapp_url:
+        kb.append([InlineKeyboardButton(text="تعديل المنشور في WebApp 🎨", web_app=WebAppInfo(url=webapp_url))])
 
     await message.answer(f"تم استلام المحتوى. يمكنك الآن تعديله وإضافة إيموجي مميز عبر الرابط أدناه. (رقم المسودة: {new_post.id})",
                          reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
@@ -100,67 +103,123 @@ async def handle_post_content(message: types.Message, is_admin: bool = False):
 # Admin Management
 @router.callback_query(F.data == "settings_admins")
 async def manage_admins(callback: types.CallbackQuery, is_owner: bool = False):
-    if not is_owner:
-        await callback.answer("عذراً، هذه الصلاحية للمالك فقط.", show_alert=True)
-        return
-    await callback.message.answer("أرسل ID المستخدم لتعيينه كأدمن، أو استخدم الأمر: \n /add_admin 12345678")
+    if not is_owner: return
 
-@router.message(Command("add_admin"))
-async def add_admin(message: types.Message, is_owner: bool = False):
+    async with AsyncSessionLocal() as session:
+        stmt = select(Admin).where(Admin.is_owner == False)
+        admins = (await session.execute(stmt)).scalars().all()
+
+    text = "👥 **قائمة المسؤولين الحالية:**\n\n"
+    if not admins:
+        text += "لا يوجد مسؤولين حالياً.\n"
+    for admin in admins:
+        text += f"- `{admin.user_id}` {f'(@{admin.username})' if admin.username else ''} /remove_{admin.user_id}\n"
+
+    text += "\n➕ لإضافة مسؤول جديد، أرسل اليوزر الخاص به مباشرة (مثال: @username) أو المعرف (ID)."
+    await callback.message.answer(text, parse_mode="Markdown")
+
+@router.message(F.text.startswith("@") | F.text.regexp(r"^\d+$"))
+async def handle_admin_management(message: types.Message, is_owner: bool = False):
+    if not is_owner: return
+
+    try:
+        input_data = message.text.strip()
+        user_id = None
+        username = None
+
+        if input_data.startswith("@"):
+            username = input_data.replace("@", "")
+            try:
+                chat = await message.bot.get_chat(input_data)
+                user_id = chat.id
+            except Exception:
+                await message.answer("❌ لم أتمكن من العثور على المستخدم عبر اليوزر. يرجى التأكد من اليوزر أو إرسال الـ ID مباشرة.")
+                return
+        else:
+            user_id = int(input_data)
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(Admin).where(Admin.user_id == user_id)
+            existing = (await session.execute(stmt)).scalar_one_or_none()
+
+            if existing:
+                await message.answer("ℹ️ هذا المستخدم مضاف بالفعل كمسؤول.")
+            else:
+                session.add(Admin(user_id=user_id, username=username))
+                await session.commit()
+                await message.answer(f"✅ تم إضافة `{user_id}` كمسؤول بنجاح.")
+    except Exception as e:
+        await message.answer(f"❌ خطأ: {e}")
+
+@router.message(F.text.startswith("/remove_"))
+async def remove_admin(message: types.Message, is_owner: bool = False):
     if not is_owner: return
     try:
-        user_id = int(message.text.split()[1])
+        user_id = int(message.text.split("_")[1])
         async with AsyncSessionLocal() as session:
-            session.add(Admin(user_id=user_id))
+            stmt = delete(Admin).where(Admin.user_id == user_id, Admin.is_owner == False)
+            result = await session.execute(stmt)
             await session.commit()
-        await message.answer(f"تم إضافة {user_id} كمسؤول.")
-    except Exception:
-        await message.answer("خطأ في إضافة المسؤول. تأكد من الصيغة: /add_admin 12345678")
+
+            if result.rowcount > 0:
+                await message.answer(f"✅ تم إزالة المسؤول `{user_id}` بنجاح.")
+            else:
+                await message.answer("❌ لم يتم العثور على مسؤول بهذا المعرف.")
+    except Exception as e:
+        await message.answer(f"❌ خطأ: {e}")
 
 # Channel Management
 @router.callback_query(F.data == "settings_channels")
 async def manage_channels(callback: types.CallbackQuery, is_owner: bool = False):
     if not is_owner: return
-    await callback.message.answer("لإضافة قناة، أرسل ID القناة مسبوقاً بـ /add_channel \n مثال: /add_channel -10012345678")
+    await callback.message.answer("لإضافة قناة جديدة، قم بإرسال رابط القناة أو اليوزر الخاص بها مباشرة.\nمثال: @mychannel أو https://t.me/mychannel")
 
-@router.message(Command("add_channel"))
-async def add_channel(message: types.Message, is_owner: bool = False):
+@router.message(F.text.startswith("@") | F.text.contains("t.me/"))
+async def handle_channel_link(message: types.Message, is_owner: bool = False):
     if not is_owner: return
-    try:
-        parts = message.text.split()
-        if len(parts) < 2:
-            await message.answer("يرجى إدخال ID القناة. مثال: /add_channel -10012345678")
-            return
 
-        channel_id = int(parts[1])
+    try:
+        link = message.text.strip()
+        if "t.me/" in link:
+            link = "@" + link.split("t.me/")[1].split("/")[0]
+
+        try:
+            chat = await message.bot.get_chat(link)
+            channel_id = chat.id
+            title = chat.title
+        except Exception as e:
+            await message.answer(f"❌ لم أتمكن من العثور على القناة. تأكد من صحة الرابط وأنني عضو فيها. الخطأ: {e}")
+            return
 
         # Verify if bot is admin in the channel
         try:
             member = await message.bot.get_chat_member(chat_id=channel_id, user_id=message.bot.id)
             if member.status not in ["administrator", "creator"]:
-                await message.answer("البوت ليس مسؤولاً في هذه القناة. يرجى رفعه لمسؤول أولاً.")
+                await message.answer(f"❌ البوت ليس مسؤولاً في القناة '{title}'. يرجى رفعه لمسؤول أولاً.")
                 return
         except Exception as e:
-            await message.answer(f"لا يمكن الوصول للقناة. تأكد من إضافتي كمسؤول فيها. الخطأ: {e}")
+            await message.answer(f"❌ لا يمكنني التحقق من صلاحياتي في القناة. الخطأ: {e}")
             return
 
         async with AsyncSessionLocal() as session:
+            # Set all channels to inactive
+            await session.execute(update(Channel).values(is_active=False))
+
             # Check if exists
             stmt = select(Channel).where(Channel.channel_id == channel_id)
             existing = (await session.execute(stmt)).scalar_one_or_none()
 
             if existing:
                 existing.is_active = True
-                await message.answer(f"القناة {channel_id} موجودة بالفعل وتم تفعيلها.")
+                existing.title = title
             else:
-                # Deactivate others and add new
-                await session.execute(update(Channel).values(is_active=False))
-                session.add(Channel(channel_id=channel_id, is_active=True))
-                await message.answer(f"تم ربط القناة {channel_id} بنجاح وتعيينها كقناة نشطة.")
+                session.add(Channel(channel_id=channel_id, title=title, is_active=True))
 
             await session.commit()
+
+        await message.answer(f"✅ تم ربط القناة **{title}** بنجاح وتعيينها كقناة نشطة للنشر.")
     except Exception as e:
-        await message.answer(f"خطأ في ربط القناة: {e}")
+        await message.answer(f"❌ حدث خطأ غير متوقع: {e}")
 
 @router.message(Command("import_emojis"))
 async def import_emojis(message: types.Message, is_owner: bool = False):

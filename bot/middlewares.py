@@ -31,10 +31,10 @@ class AuthMiddleware(BaseMiddleware):
                 data["is_owner"] = True
                 return await handler(event, data)
 
-        # Allow /start for everyone
-        if hasattr(event, "text") and event.text and event.text.startswith("/start"):
-             return await handler(event, data)
-
+        # If not authorized, send access denied message and return
         if hasattr(event, "answer"):
-            await event.answer("عذراً، هذا البوت مخصص للمسؤولين فقط.")
+            if isinstance(event, Message):
+                await event.answer("⚠️ غير مصرح لك باستخدام البوت.")
+            else: # CallbackQuery
+                await event.answer("⚠️ غير مصرح لك باستخدام البوت.", show_alert=True)
         return
