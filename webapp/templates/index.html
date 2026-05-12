@@ -28,26 +28,45 @@
             background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
             color: var(--tg-theme-text-color);
         }
-        .emoji-list {
+        .group-list {
+            display: flex;
+            overflow-x: auto;
+            gap: 10px;
+            padding: 10px 0;
+        }
+        .group-item {
+            min-width: 80px;
+            text-align: center;
+            cursor: pointer;
+            padding: 10px;
+            background: #eee;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+        .group-item.active {
+            background: var(--tg-theme-button-color, #2481cc);
+            color: white;
+        }
+        .emoji-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(45px, 1fr));
             gap: 10px;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 8px;
-            max-height: 150px;
+            max-height: 200px;
             overflow-y: auto;
         }
         .emoji-item {
             cursor: pointer;
             text-align: center;
-            font-size: 20px;
+            font-size: 24px;
             padding: 5px;
             border-radius: 4px;
-            background: #eee;
+            background: #f9f9f9;
         }
         .emoji-item:hover {
-            background: #ddd;
+            background: #eee;
         }
         .btn {
             padding: 12px;
@@ -60,10 +79,6 @@
         }
         .secondary-btn {
             background-color: #6c757d;
-        }
-        .json-section {
-            display: none;
-            margin-top: 10px;
         }
         .preview-box {
             border: 1px dashed #aaa;
@@ -78,23 +93,29 @@
             padding: 10px;
             border-radius: 8px;
         }
+        .json-section { display: none; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h3>محرر المنشورات</h3>
+        <h3>محرر المنشورات 🎨</h3>
 
         <textarea id="post-text" placeholder="اكتب نص المنشور هنا...">{{ post.text if post else '' }}</textarea>
 
         <div id="preview-area" class="preview-box">معاينة المنشور ستظهر هنا...</div>
 
-        <h4>إضافة إيموجي مميز</h4>
-        <div class="emoji-list">
-            {% for emoji in emojis %}
-            <div class="emoji-item" onclick="insertEmoji('{{ emoji.custom_emoji_id }}')" title="{{ emoji.custom_emoji_id }}">
-                ✨
+        <h4>اختر مجموعة إيموجي</h4>
+        <div class="group-list">
+            {% for group_name, data in emoji_groups.items() %}
+            <div class="group-item" id="group-{{ loop.index0 }}" onclick="showGroup('{{ group_name }}', {{ loop.index0 }})">
+                <div style="font-size: 20px;">{{ data.preview }}</div>
+                <div>{{ group_name }}</div>
             </div>
             {% endfor %}
+        </div>
+
+        <div id="emoji-display" class="emoji-grid" style="display: none;">
+            <!-- Emojis will be loaded here -->
         </div>
 
         <div class="scheduling">
@@ -105,7 +126,7 @@
         <button class="btn secondary-btn" onclick="toggleJson()">إدخال JSON يدوي</button>
 
         <div id="json-section" class="json-section">
-            <textarea id="manual-json" placeholder='{"entities": [...]}' style="height: 80px;"></textarea>
+            <textarea id="manual-json" style="height: 80px;"></textarea>
             <button class="btn" onclick="applyManualJson()" style="width: 100%; margin-top: 5px;">تطبيق JSON</button>
         </div>
 
@@ -119,6 +140,7 @@
 
         let entities = [];
         const postId = new URLSearchParams(window.location.search).get('post_id');
+        const emojiGroups = {{ emoji_groups | tojson }};
 
         try {
             const initialEntities = '{{ post.entities_json | safe if post and post.entities_json else "[]" }}';
@@ -126,18 +148,36 @@
             updatePreview();
         } catch(e) { console.error(e); }
 
-        function insertEmoji(emojiId) {
+        function showGroup(groupName, index) {
+            const display = document.getElementById('emoji-display');
+            display.style.display = 'grid';
+            display.innerHTML = '';
+
+            // Highlight active group
+            document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('group-' + index).classList.add('active');
+
+            const group = emojiGroups[groupName];
+            group.emojis.forEach(emoji => {
+                const div = document.createElement('div');
+                div.className = 'emoji-item';
+                div.innerText = emoji.text;
+                div.onclick = () => insertEmoji(emoji.custom_emoji_id, emoji.text);
+                display.appendChild(div);
+            });
+        }
+
+        function insertEmoji(emojiId, emojiText) {
             const textarea = document.getElementById('post-text');
             const start = textarea.selectionStart;
             const text = textarea.value;
 
-            const placeholder = "✨";
-            textarea.value = text.substring(0, start) + placeholder + text.substring(start);
+            textarea.value = text.substring(0, start) + emojiText + text.substring(start);
 
             entities.push({
                 type: "custom_emoji",
                 offset: start,
-                length: placeholder.length,
+                length: emojiText.length,
                 custom_emoji_id: emojiId
             });
 
@@ -164,19 +204,16 @@
                     entities = data.entities;
                     updatePreview();
                 }
-            } catch(e) {
-                tg.showAlert("خطأ في صيغة JSON");
-            }
+            } catch(e) { tg.showAlert("خطأ في صيغة JSON"); }
         }
 
         async function apiRequest(endpoint, body) {
-            const headers = {
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': tg.initData
-            };
             return fetch(endpoint, {
                 method: 'POST',
-                headers: headers,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Telegram-Init-Data': tg.initData
+                },
                 body: JSON.stringify(body)
             });
         }
@@ -184,7 +221,6 @@
         async function saveDraft() {
             const text = document.getElementById('post-text').value;
             const schedule = document.getElementById('schedule-time').value;
-
             const response = await apiRequest('/save_post', {
                 post_id: postId,
                 text: text,
@@ -192,22 +228,17 @@
                 scheduled_at: schedule
             });
             const res = await response.json();
-            if(res.status === 'success') {
-                tg.showAlert("تم حفظ المسودة بنجاح!");
-            }
+            if(res.status === 'success') tg.showAlert("تم حفظ المسودة بنجاح!");
         }
 
         async function publishNow() {
-            tg.showConfirm("هل أنت متأكد من رغبتك في النشر الآن؟", async (ok) => {
+            tg.showConfirm("هل أنت متأكد من النشر؟", async (ok) => {
                 if(ok) {
                     await saveDraft();
                     const response = await apiRequest('/publish_now', { post_id: postId });
                     const res = await response.json();
-                    if(res.status === 'success') {
-                        tg.close();
-                    } else {
-                        tg.showAlert("فشل النشر: " + res.message);
-                    }
+                    if(res.status === 'success') tg.close();
+                    else tg.showAlert("فشل النشر: " + res.message);
                 }
             });
         }

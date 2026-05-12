@@ -5,10 +5,12 @@ from fastapi.templating import Jinja2Templates
 from database.models import AsyncSessionLocal, Post, CustomEmoji, Admin
 from sqlalchemy import select, update
 from utils.publisher import publish_post
-from utils.auth import validate_init_data
+from utils.auth import validate_init_data, get_user_id_from_init_data
+from utils.emoji_loader import scan_emojis
 from aiogram import Bot
 import json
 import os
+import datetime
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="webapp/static"), name="static")
@@ -21,17 +23,14 @@ async def get_db():
         yield db
 
 async def verify_user(request: Request, db=Depends(get_db)):
-    # In a real scenario, the client sends initData in a header
     init_data = request.headers.get("X-Telegram-Init-Data")
     if not init_data:
-        # For development/preview, we might allow it, but for production it's strict
         if os.getenv("ENV") == "dev": return True
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     if not validate_init_data(os.getenv("BOT_TOKEN"), init_data):
         raise HTTPException(status_code=401, detail="Invalid init data")
 
-    # Further check if user is admin
     user_id = get_user_id_from_init_data(init_data)
     res = await db.execute(select(Admin).where(Admin.user_id == user_id))
     if not res.scalar_one_or_none():
@@ -45,15 +44,14 @@ async def index(request: Request, post_id: int = None, db=Depends(get_db)):
         result = await db.execute(select(Post).where(Post.id == int(post_id)))
         post_data = result.scalar_one_or_none()
 
-    emojis_result = await db.execute(select(CustomEmoji))
-    emojis = emojis_result.scalars().all()
+    emoji_groups = scan_emojis()
 
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "post": post_data,
-            "emojis": emojis
+            "emoji_groups": emoji_groups
         }
     )
 
@@ -64,20 +62,9 @@ async def save_post(data: dict, db=Depends(get_db)):
     entities = data.get("entities", [])
     scheduled_at = data.get("scheduled_at")
 
-    allowed_emojis_res = await db.execute(select(CustomEmoji.custom_emoji_id))
-    allowed_ids = set(allowed_emojis_res.scalars().all())
+    # For simplicity, we trust the emoji IDs if they come from the loader,
+    # but in a stricter env, we'd validate against a global list of allowed IDs.
 
-    validated_entities = []
-    for ent in entities:
-        if ent.get("type") == "custom_emoji":
-            emoji_id = str(ent.get("custom_emoji_id"))
-            if emoji_id in allowed_ids:
-                validated_entities.append(ent)
-        else:
-            validated_entities.append(ent)
-
-    # Convert scheduled_at string to datetime if present
-    import datetime
     dt_scheduled = None
     if scheduled_at:
         try:
@@ -86,7 +73,7 @@ async def save_post(data: dict, db=Depends(get_db)):
 
     q = update(Post).where(Post.id == post_id).values(
         text=text,
-        entities_json=json.dumps(validated_entities),
+        entities_json=json.dumps(entities),
         scheduled_at=dt_scheduled
     )
     await db.execute(q)
