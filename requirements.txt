@@ -1,0 +1,10 @@
+aiogram>=3.0.0
+fastapi
+uvicorn
+sqlalchemy
+aiosqlite
+apscheduler
+python-dotenv
+jinja2
+pydantic
+pydantic-settings

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محرر المنشورات الاحترافي</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            color: var(--tg-theme-text-color);
+        }
+        .emoji-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .emoji-item {
+            cursor: pointer;
+            text-align: center;
+            font-size: 20px;
+            padding: 5px;
+            border-radius: 4px;
+            background: #eee;
+        }
+        .emoji-item:hover {
+            background: #ddd;
+        }
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background-color: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .secondary-btn {
+            background-color: #6c757d;
+        }
+        .json-section {
+            display: none;
+            margin-top: 10px;
+        }
+        .preview-box {
+            border: 1px dashed #aaa;
+            padding: 10px;
+            border-radius: 8px;
+            min-height: 50px;
+            white-space: pre-wrap;
+            background: rgba(0,0,0,0.05);
+        }
+        .scheduling {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h3>محرر المنشورات</h3>
+
+        <textarea id="post-text" placeholder="اكتب نص المنشور هنا...">{{ post.text if post else '' }}</textarea>
+
+        <div id="preview-area" class="preview-box">معاينة المنشور ستظهر هنا...</div>
+
+        <h4>إضافة إيموجي مميز</h4>
+        <div class="emoji-list">
+            {% for emoji in emojis %}
+            <div class="emoji-item" onclick="insertEmoji('{{ emoji.custom_emoji_id }}')" title="{{ emoji.custom_emoji_id }}">
+                ✨
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="scheduling">
+            <label>جدولة المنشور (اختياري):</label>
+            <input type="datetime-local" id="schedule-time" style="width: 100%; padding: 8px; margin-top: 5px;">
+        </div>
+
+        <button class="btn secondary-btn" onclick="toggleJson()">إدخال JSON يدوي</button>
+
+        <div id="json-section" class="json-section">
+            <textarea id="manual-json" placeholder='{"entities": [...]}' style="height: 80px;"></textarea>
+            <button class="btn" onclick="applyManualJson()" style="width: 100%; margin-top: 5px;">تطبيق JSON</button>
+        </div>
+
+        <button class="btn" onclick="saveDraft()">حفظ المسودة 💾</button>
+        <button class="btn" onclick="publishNow()" style="background-color: #28a745;">نشر الآن 🚀</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let entities = [];
+        const postId = new URLSearchParams(window.location.search).get('post_id');
+
+        try {
+            const initialEntities = '{{ post.entities_json | safe if post and post.entities_json else "[]" }}';
+            entities = JSON.parse(initialEntities);
+            updatePreview();
+        } catch(e) { console.error(e); }
+
+        function insertEmoji(emojiId) {
+            const textarea = document.getElementById('post-text');
+            const start = textarea.selectionStart;
+            const text = textarea.value;
+
+            const placeholder = "✨";
+            textarea.value = text.substring(0, start) + placeholder + text.substring(start);
+
+            entities.push({
+                type: "custom_emoji",
+                offset: start,
+                length: placeholder.length,
+                custom_emoji_id: emojiId
+            });
+
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const text = document.getElementById('post-text').value;
+            document.getElementById('preview-area').innerText = text;
+            document.getElementById('manual-json').value = JSON.stringify({entities: entities}, null, 2);
+        }
+
+        document.getElementById('post-text').addEventListener('input', updatePreview);
+
+        function toggleJson() {
+            const section = document.getElementById('json-section');
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function applyManualJson() {
+            try {
+                const data = JSON.parse(document.getElementById('manual-json').value);
+                if(data.entities) {
+                    entities = data.entities;
+                    updatePreview();
+                }
+            } catch(e) {
+                tg.showAlert("خطأ في صيغة JSON");
+            }
+        }
+
+        async function apiRequest(endpoint, body) {
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-Telegram-Init-Data': tg.initData
+            };
+            return fetch(endpoint, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(body)
+            });
+        }
+
+        async function saveDraft() {
+            const text = document.getElementById('post-text').value;
+            const schedule = document.getElementById('schedule-time').value;
+
+            const response = await apiRequest('/save_post', {
+                post_id: postId,
+                text: text,
+                entities: entities,
+                scheduled_at: schedule
+            });
+            const res = await response.json();
+            if(res.status === 'success') {
+                tg.showAlert("تم حفظ المسودة بنجاح!");
+            }
+        }
+
+        async function publishNow() {
+            tg.showConfirm("هل أنت متأكد من رغبتك في النشر الآن؟", async (ok) => {
+                if(ok) {
+                    await saveDraft();
+                    const response = await apiRequest('/publish_now', { post_id: postId });
+                    const res = await response.json();
+                    if(res.status === 'success') {
+                        tg.close();
+                    } else {
+                        tg.showAlert("فشل النشر: " + res.message);
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

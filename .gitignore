@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+*$py.class
+bot_database.db
+.env
+webapp.log
+verification/
