@@ -210,6 +210,10 @@
         const postId = new URLSearchParams(window.location.search).get('post_id');
         const emojiGroups = {{ emoji_groups | tojson }};
 
+        let currentGroupEmojis = [];
+        let itemsToShow = 20;
+        const PAGE_SIZE = 20;
+
         // Initialize state
         try {
             const initialText = '{{ post.text if post else "" }}';
@@ -232,14 +236,10 @@
             const activeGroup = document.getElementById('group-' + index);
             activeGroup.classList.add('ring-2', 'ring-blue-500', 'bg-blue-500/10');
 
-            const group = emojiGroups[groupName];
-            group.emojis.forEach(emoji => {
-                const btn = document.createElement('button');
-                btn.className = 'emoji-card h-12 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 text-2xl hover:bg-blue-500/20 active:bg-blue-500';
-                btn.innerText = emoji.text;
-                btn.onclick = () => insertEmoji(emoji.custom_emoji_id, emoji.text);
-                display.appendChild(btn);
-            });
+            currentGroupEmojis = emojiGroups[groupName].emojis;
+            itemsToShow = PAGE_SIZE;
+
+            renderEmojis();
 
             container.classList.remove('hidden');
             container.classList.add('fade-in-contrast');
@@ -247,6 +247,30 @@
             // Scroll to container
             container.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
+
+        function renderEmojis() {
+            const display = document.getElementById('emoji-display');
+            const emojisToRender = currentGroupEmojis.slice(display.childElementCount, itemsToShow);
+
+            emojisToRender.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.className = 'emoji-card h-12 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 text-2xl hover:bg-blue-500/20 active:bg-blue-500';
+                btn.innerText = emoji.text;
+                btn.onclick = () => insertEmoji(emoji.custom_emoji_id, emoji.text);
+                display.appendChild(btn);
+            });
+        }
+
+        // Infinite scroll listener for emoji display
+        document.getElementById('emoji-display').addEventListener('scroll', function(e) {
+            const { scrollTop, scrollHeight, clientHeight } = e.target;
+            if (scrollTop + clientHeight >= scrollHeight - 20) {
+                if (itemsToShow < currentGroupEmojis.length) {
+                    itemsToShow += PAGE_SIZE;
+                    renderEmojis();
+                }
+            }
+        });
 
         function hideEmojis() {
             document.getElementById('emoji-container').classList.add('hidden');
