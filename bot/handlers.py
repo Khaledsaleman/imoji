@@ -8,22 +8,66 @@ import json
 
 router = Router()
 
+def get_webapp_url():
+    url = os.getenv("WEBAPP_URL")
+    if not url or "your-webapp-url.com" in url:
+        return None
+    return url
+
+@router.message(Command("config"))
+async def cmd_config(message: types.Message, is_owner: bool = False):
+    if not is_owner: return
+
+    webapp_url = os.getenv("WEBAPP_URL")
+    db_url = os.getenv("DATABASE_URL")
+
+    status = "✅ مضبوط" if webapp_url and "your-webapp-url.com" not in webapp_url else "❌ غير مضبوط"
+
+    text = (
+        "⚙️ **إعدادات البوت الحالية:**\n\n"
+        f"🔗 **رابط WebApp:** `{webapp_url}`\n"
+        f"📊 **الحالة:** {status}\n\n"
+        f"📁 **قاعدة البيانات:** `{db_url}`\n"
+        f"👤 **معرف المالك:** `{os.getenv('OWNER_ID')}`\n\n"
+        "💡 لتغيير هذه الإعدادات، يرجى تعديلها في لوحة تحكم Render (Environment Variables)."
+    )
+    await message.answer(text, parse_mode="Markdown")
+
 @router.message(Command("start"))
 async def cmd_start(message: types.Message, is_admin: bool = False):
     if not is_admin:
         await message.answer("مرحباً بك. هذا البوت مخصص لإدارة القنوات والنشر الاحترافي.")
         return
 
-    kb = [
-        [InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=os.getenv("WEBAPP_URL")))],
-        [InlineKeyboardButton(text="إعدادات القنوات 📺", callback_data="settings_channels")],
-        [InlineKeyboardButton(text="إدارة الأدمنز 👥", callback_data="settings_admins")]
-    ]
-    await message.answer("أهلاً بك في لوحة التحكم!", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    webapp_url = get_webapp_url()
+
+    kb = []
+    if webapp_url:
+        kb.append([InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=webapp_url))])
+    else:
+        kb.append([InlineKeyboardButton(text="⚠️ يرجى ضبط رابط الـ WebApp أولاً", callback_data="webapp_error")])
+
+    kb.append([InlineKeyboardButton(text="إعدادات القنوات 📺", callback_data="settings_channels")])
+    kb.append([InlineKeyboardButton(text="إدارة الأدمنز 👥", callback_data="settings_admins")])
+
+    msg = "أهلاً بك في لوحة التحكم!"
+    if not webapp_url:
+        msg += "\n\n⚠️ **تنبيه:** لم يتم ضبط رابط الـ WebApp بشكل صحيح في إعدادات Render. يرجى مراجعة ملف التعليمات RENDER_GUIDE_AR.md"
+
+    await message.answer(msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+@router.callback_query(F.data == "webapp_error")
+async def webapp_error(callback: types.CallbackQuery):
+    await callback.answer("الرابط غير مضبوط! يرجى إضافة WEBAPP_URL في إعدادات Render.", show_alert=True)
 
 @router.message(F.photo | F.video | F.text)
 async def handle_post_content(message: types.Message, is_admin: bool = False):
     if not is_admin: return
+
+    webapp_url = get_webapp_url()
+    if not webapp_url:
+        await message.answer("⚠️ لا يمكن تعديل المنشور لأن رابط الـ WebApp غير مضبوط. يرجى ضبطه في إعدادات Render أولاً.")
+        return
 
     media_file_id = None
     media_type = None
@@ -47,7 +91,7 @@ async def handle_post_content(message: types.Message, is_admin: bool = False):
         await session.commit()
         await session.refresh(new_post)
 
-    webapp_url = f"{os.getenv('WEBAPP_URL')}?post_id={new_post.id}"
+    webapp_url = f"{get_webapp_url()}?post_id={new_post.id}"
     kb = [[InlineKeyboardButton(text="تعديل المنشور في WebApp 🎨", web_app=WebAppInfo(url=webapp_url))]]
 
     await message.answer(f"تم استلام المحتوى. يمكنك الآن تعديله وإضافة إيموجي مميز عبر الرابط أدناه. (رقم المسودة: {new_post.id})",
