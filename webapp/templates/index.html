@@ -255,8 +255,19 @@
             emojisToRender.forEach(emoji => {
                 const btn = document.createElement('button');
                 btn.className = 'emoji-card h-12 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 text-2xl hover:bg-blue-500/20 active:bg-blue-500';
-                btn.innerText = emoji.text;
-                btn.onclick = () => insertEmoji(emoji.custom_emoji_id, emoji.text);
+
+                // Fallback for missing text or ID
+                const emojiId = emoji.custom_emoji_id || emoji.id || emoji.emoji_id;
+                const emojiText = emoji.text || "✨";
+
+                btn.innerText = emojiText;
+
+                if (emojiId) {
+                    btn.onclick = () => insertEmoji(emojiId, emojiText);
+                } else {
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+
                 display.appendChild(btn);
             });
         }
@@ -278,6 +289,11 @@
         }
 
         function insertEmoji(emojiId, emojiText) {
+            if (!emojiId || emojiId === "undefined") {
+                tg.showAlert("خطأ: معرف الإيموجي غير موجود");
+                return;
+            }
+
             const textarea = document.getElementById('post-text');
             const start = textarea.selectionStart;
             const text = textarea.value;
@@ -295,7 +311,7 @@
                 type: "custom_emoji",
                 offset: start,
                 length: emojiText.length,
-                custom_emoji_id: emojiId
+                custom_emoji_id: String(emojiId)
             });
 
             updateCharCount();
