@@ -2,7 +2,7 @@ from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from database.models import AsyncSessionLocal, Admin, Channel, CustomEmoji, Post
-from sqlalchemy import select, insert, delete
+from sqlalchemy import select, insert, delete, update
 import os
 import json
 
@@ -54,12 +54,12 @@ async def handle_post_content(message: types.Message, is_admin: bool = False):
                          reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 # Admin Management
-@router.callback_data(F.data == "settings_admins")
+@router.callback_query(F.data == "settings_admins")
 async def manage_admins(callback: types.CallbackQuery, is_owner: bool = False):
     if not is_owner:
         await callback.answer("عذراً، هذه الصلاحية للمالك فقط.", show_alert=True)
         return
-    await callback.message.answer("أرسل ID المستخدم لتعيينه كأدمن، أو استخدم الأمر: \n `/add_admin 12345678`", parse_mode="Markdown")
+    await callback.message.answer("أرسل ID المستخدم لتعيينه كأدمن، أو استخدم الأمر: \n /add_admin 12345678")
 
 @router.message(Command("add_admin"))
 async def add_admin(message: types.Message, is_owner: bool = False):
@@ -74,22 +74,49 @@ async def add_admin(message: types.Message, is_owner: bool = False):
         await message.answer("خطأ في إضافة المسؤول. تأكد من الصيغة: /add_admin 12345678")
 
 # Channel Management
-@router.callback_data(F.data == "settings_channels")
+@router.callback_query(F.data == "settings_channels")
 async def manage_channels(callback: types.CallbackQuery, is_owner: bool = False):
     if not is_owner: return
-    await callback.message.answer("لإضافة قناة، أرسل ID القناة مسبوقاً بـ /add_channel \n مثال: `/add_channel -10012345678`", parse_mode="Markdown")
+    await callback.message.answer("لإضافة قناة، أرسل ID القناة مسبوقاً بـ /add_channel \n مثال: /add_channel -10012345678")
 
 @router.message(Command("add_channel"))
 async def add_channel(message: types.Message, is_owner: bool = False):
     if not is_owner: return
     try:
-        channel_id = int(message.text.split()[1])
+        parts = message.text.split()
+        if len(parts) < 2:
+            await message.answer("يرجى إدخال ID القناة. مثال: /add_channel -10012345678")
+            return
+
+        channel_id = int(parts[1])
+
+        # Verify if bot is admin in the channel
+        try:
+            member = await message.bot.get_chat_member(chat_id=channel_id, user_id=message.bot.id)
+            if member.status not in ["administrator", "creator"]:
+                await message.answer("البوت ليس مسؤولاً في هذه القناة. يرجى رفعه لمسؤول أولاً.")
+                return
+        except Exception as e:
+            await message.answer(f"لا يمكن الوصول للقناة. تأكد من إضافتي كمسؤول فيها. الخطأ: {e}")
+            return
+
         async with AsyncSessionLocal() as session:
-            session.add(Channel(channel_id=channel_id))
+            # Check if exists
+            stmt = select(Channel).where(Channel.channel_id == channel_id)
+            existing = (await session.execute(stmt)).scalar_one_or_none()
+
+            if existing:
+                existing.is_active = True
+                await message.answer(f"القناة {channel_id} موجودة بالفعل وتم تفعيلها.")
+            else:
+                # Deactivate others and add new
+                await session.execute(update(Channel).values(is_active=False))
+                session.add(Channel(channel_id=channel_id, is_active=True))
+                await message.answer(f"تم ربط القناة {channel_id} بنجاح وتعيينها كقناة نشطة.")
+
             await session.commit()
-        await message.answer(f"تم ربط القناة {channel_id} بنجاح.")
-    except Exception:
-        await message.answer("خطأ في ربط القناة. تأكد من الـ ID.")
+    except Exception as e:
+        await message.answer(f"خطأ في ربط القناة: {e}")
 
 @router.message(Command("import_emojis"))
 async def import_emojis(message: types.Message, is_owner: bool = False):

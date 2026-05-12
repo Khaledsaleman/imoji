@@ -7,15 +7,16 @@ from sqlalchemy import select
 class AuthMiddleware(BaseMiddleware):
     async def __call__(
         self,
-        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
-        event: Message,
+        handler: Callable[[Any, Dict[str, Any]], Awaitable[Any]],
+        event: Any,
         data: Dict[str, Any]
     ) -> Any:
-        if not event.from_user:
+        user = getattr(event, "from_user", None)
+        if not user:
             return await handler(event, data)
 
         async with AsyncSessionLocal() as session:
-            result = await session.execute(select(Admin).where(Admin.user_id == event.from_user.id))
+            result = await session.execute(select(Admin).where(Admin.user_id == user.id))
             admin = result.scalar_one_or_none()
 
             if admin:
@@ -23,16 +24,17 @@ class AuthMiddleware(BaseMiddleware):
                 data["is_owner"] = admin.is_owner
                 return await handler(event, data)
 
-            # Check if it's the first run or owner from env
             import os
             owner_id = int(os.getenv("OWNER_ID", 0))
-            if event.from_user.id == owner_id:
+            if user.id == owner_id:
                 data["is_admin"] = True
                 data["is_owner"] = True
                 return await handler(event, data)
 
-        if event.text and event.text.startswith("/start"):
+        # Allow /start for everyone
+        if hasattr(event, "text") and event.text and event.text.startswith("/start"):
              return await handler(event, data)
 
-        await event.answer("عذراً، هذا البوت مخصص للمسؤولين فقط.")
+        if hasattr(event, "answer"):
+            await event.answer("عذراً، هذا البوت مخصص للمسؤولين فقط.")
         return

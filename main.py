@@ -15,8 +15,9 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 
-async def run_bot():
+async def start_services():
     await init_db()
+
     bot = Bot(token=os.getenv("BOT_TOKEN"))
     dp = Dispatcher(storage=MemoryStorage())
 
@@ -26,23 +27,20 @@ async def run_bot():
 
     start_scheduler(bot)
 
-    logging.info("Bot started...")
-    await dp.start_polling(bot)
+    logging.info("Bot & Scheduler starting...")
 
-async def run_app():
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    # Start bot polling as a background task
+    asyncio.create_task(dp.start_polling(bot))
+
+    # The WebApp (FastAPI) will be run by uvicorn/gunicorn in production
+    # but here we keep it as an option for local testing.
+    port = int(os.getenv("PORT", 8000))
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
     server = uvicorn.Server(config)
     await server.serve()
 
-async def main():
-    # Run both bot and webapp concurrently
-    await asyncio.gather(
-        run_bot(),
-        run_app()
-    )
-
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        asyncio.run(start_services())
     except (KeyboardInterrupt, SystemExit):
         logging.info("System stopped.")

@@ -8,3 +8,5 @@ python-dotenv
 jinja2
 pydantic
 pydantic-settings
+python-multipart
+gunicorn
