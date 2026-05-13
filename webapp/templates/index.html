@@ -276,13 +276,28 @@
             tg.HapticFeedback.impactOccurred('light');
         }
 
+        async function fetchWithRetry(url, options = {}, retries = 3, backoff = 500) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return await response.json();
+            } catch (e) {
+                if (retries > 0) {
+                    console.log(`Retry left: ${retries}. Retrying in ${backoff}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, backoff));
+                    return fetchWithRetry(url, options, retries - 1, backoff * 2);
+                }
+                throw e;
+            }
+        }
+
         async function showGroup(groupName, index) {
             const container = document.getElementById('emoji-container');
             const display = document.getElementById('emoji-display');
             const nameEl = document.getElementById('active-group-name');
 
             nameEl.innerText = groupName;
-            display.innerHTML = '<div class="col-span-5 text-center text-xs text-tg-hint py-4">جاري التحميل...</div>';
+            display.innerHTML = '<div class="col-span-5 text-center text-xs text-tg-hint py-4 flex flex-col items-center gap-2"><span>جاري التحميل...</span><div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>';
 
             // Highlight active group
             document.querySelectorAll('.group-item').forEach(el => el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/10'));
@@ -300,14 +315,18 @@
                 renderEmojis();
             } else {
                 try {
-                    const response = await fetch(`/api/emojis/${encodeURIComponent(groupName)}`);
-                    currentGroupEmojis = await response.json();
+                    currentGroupEmojis = await fetchWithRetry(`/api/emojis/${encodeURIComponent(groupName)}`);
                     groupCache[groupName] = currentGroupEmojis;
                     display.innerHTML = '';
                     itemsToShow = PAGE_SIZE;
                     renderEmojis();
                 } catch(e) {
-                    display.innerHTML = '<div class="col-span-5 text-center text-xs text-red-500 py-4">فشل التحميل</div>';
+                    display.innerHTML = `
+                        <div class="col-span-5 text-center text-xs text-red-500 py-4 flex flex-col items-center gap-2">
+                            <span>فشل تحميل المجموعة</span>
+                            <button onclick="showGroup('${groupName}', ${index})" class="px-3 py-1 bg-blue-500 text-white rounded-lg text-[10px]">إعادة المحاولة</button>
+                        </div>
+                    `;
                 }
             }
         }

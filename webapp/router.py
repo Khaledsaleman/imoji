@@ -6,7 +6,7 @@ from database.models import AsyncSessionLocal, Post, CustomEmoji, Admin, Channel
 from sqlalchemy import select, update
 from utils.publisher import publish_post
 from utils.auth import validate_init_data, get_user_id_from_init_data
-from utils.emoji_loader import scan_emojis
+from utils.emoji_loader import scan_emojis, get_all_emojis
 from aiogram import Bot
 import json
 import os
@@ -44,7 +44,9 @@ async def index(request: Request, post_id: int = None, db=Depends(get_db)):
         except Exception as e:
             logging.error(f"Error fetching post {post_id}: {e}")
 
-    emoji_groups_full = scan_emojis()
+    # Use the optimized merged emoji list
+    emoji_groups_full = await get_all_emojis()
+
     # Optimization: Send only metadata (name + preview) initially
     emoji_groups_meta = {}
     for name, data in emoji_groups_full.items():
@@ -64,7 +66,7 @@ async def index(request: Request, post_id: int = None, db=Depends(get_db)):
 
 @app.get("/api/emojis/{group_name}")
 async def get_group_emojis(group_name: str):
-    emoji_groups = scan_emojis()
+    emoji_groups = await get_all_emojis()
     group = emoji_groups.get(group_name)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
