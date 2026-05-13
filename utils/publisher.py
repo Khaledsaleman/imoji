@@ -14,11 +14,17 @@ async def publish_post(bot: Bot, post_id: int):
             logging.error(f"Post {post_id} not found")
             return False
 
-        # Fetch active channel
-        channel_result = await session.execute(select(Channel).where(Channel.is_active == True))
-        channel = channel_result.scalar_one_or_none()
+        # Use post.channel_id if specified, otherwise fallback to first active channel
+        target_channel_id = post.channel_id
+        if target_channel_id:
+            channel_result = await session.execute(select(Channel).where(Channel.channel_id == target_channel_id))
+            channel = channel_result.scalar_one_or_none()
+        else:
+            channel_result = await session.execute(select(Channel).where(Channel.is_active == True))
+            channel = channel_result.scalar_one_or_none()
+
         if not channel:
-            logging.error("No active channel found")
+            logging.error(f"No target channel found for post {post_id}")
             return False
 
         # Parse entities

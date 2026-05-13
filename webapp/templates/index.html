@@ -96,7 +96,7 @@
 <body class="p-4 md:p-6 bg-tg-main">
     <div class="max-w-md mx-auto space-y-6 fade-in-contrast">
         <!-- Header -->
-        <header class="flex items-center justify-between mb-8">
+        <header class="flex items-center justify-between mb-6">
             <div class="flex items-center gap-3">
                 <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
                     <span class="text-2xl">🎨</span>
@@ -112,6 +112,16 @@
                 </svg>
             </div>
         </header>
+
+        <!-- Channel Selector -->
+        <section id="channel-selector" class="glass-panel p-3 border-tg">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-tg-hint mr-1">النشر في قناة:</span>
+            </div>
+            <div id="channels-list" class="flex gap-3 overflow-x-auto pb-1 custom-scrollbar">
+                <!-- Channels will be loaded here -->
+            </div>
+        </section>
 
         <!-- Editor Section -->
         <div class="glass-panel p-5 space-y-4 shadow-sm border-tg">
@@ -207,45 +217,99 @@
         }
 
         let entities = [];
+        let selectedChannelId = '{{ post.channel_id if post and post.channel_id else "" }}';
         const postId = new URLSearchParams(window.location.search).get('post_id');
         const emojiGroups = {{ emoji_groups | tojson }};
 
         let currentGroupEmojis = [];
-        let itemsToShow = 20;
-        const PAGE_SIZE = 20;
+        let itemsToShow = 15;
+        const PAGE_SIZE = 15;
+        let groupCache = {};
 
         // Initialize state
         try {
-            const initialText = '{{ post.text if post else "" }}';
+            const initialText = '{{ post.text if post else "" }}'.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
             const initialEntities = '{{ post.entities_json | safe if post and post.entities_json else "[]" }}';
             document.getElementById('post-text').value = initialText;
             entities = JSON.parse(initialEntities);
             updateCharCount();
+            loadChannels();
         } catch(e) { console.error(e); }
 
-        function showGroup(groupName, index) {
+        async function loadChannels() {
+            try {
+                const response = await fetch('/api/channels');
+                const channels = await response.json();
+                const container = document.getElementById('channels-list');
+                container.innerHTML = '';
+
+                channels.forEach(ch => {
+                    const btn = document.createElement('button');
+                    const isActive = selectedChannelId == ch.id;
+                    btn.className = `flex-shrink-0 flex items-center gap-2 p-2 rounded-xl border transition-all ${isActive ? 'bg-blue-500/10 border-blue-500 scale-105' : 'border-tg opacity-70'}`;
+                    btn.id = `channel-btn-${ch.id}`;
+
+                    const img = ch.photo ? `<img src="${ch.photo}" class="w-8 h-8 rounded-full">` : `<div class="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-xs">📺</div>`;
+
+                    btn.innerHTML = `${img}<span class="text-xs font-bold text-tg-main">${ch.title}</span>`;
+                    btn.onclick = () => selectChannel(ch.id);
+                    container.appendChild(btn);
+                });
+
+                if (!selectedChannelId && channels.length > 0) {
+                    selectChannel(channels[0].id);
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        function selectChannel(id) {
+            document.querySelectorAll('[id^="channel-btn-"]').forEach(el => {
+                el.classList.remove('bg-blue-500/10', 'border-blue-500', 'scale-105');
+                el.classList.add('opacity-70', 'border-tg');
+            });
+            const selected = document.getElementById(`channel-btn-${id}`);
+            if (selected) {
+                selected.classList.add('bg-blue-500/10', 'border-blue-500', 'scale-105');
+                selected.classList.remove('opacity-70', 'border-tg');
+            }
+            selectedChannelId = id;
+            tg.HapticFeedback.impactOccurred('light');
+        }
+
+        async function showGroup(groupName, index) {
             const container = document.getElementById('emoji-container');
             const display = document.getElementById('emoji-display');
             const nameEl = document.getElementById('active-group-name');
 
             nameEl.innerText = groupName;
-            display.innerHTML = '';
+            display.innerHTML = '<div class="col-span-5 text-center text-xs text-tg-hint py-4">جاري التحميل...</div>';
 
             // Highlight active group
             document.querySelectorAll('.group-item').forEach(el => el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/10'));
             const activeGroup = document.getElementById('group-' + index);
             activeGroup.classList.add('ring-2', 'ring-blue-500', 'bg-blue-500/10');
 
-            currentGroupEmojis = emojiGroups[groupName].emojis;
-            itemsToShow = PAGE_SIZE;
-
-            renderEmojis();
-
             container.classList.remove('hidden');
             container.classList.add('fade-in-contrast');
-
-            // Scroll to container
             container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            if (groupCache[groupName]) {
+                currentGroupEmojis = groupCache[groupName];
+                display.innerHTML = '';
+                itemsToShow = PAGE_SIZE;
+                renderEmojis();
+            } else {
+                try {
+                    const response = await fetch(`/api/emojis/${encodeURIComponent(groupName)}`);
+                    currentGroupEmojis = await response.json();
+                    groupCache[groupName] = currentGroupEmojis;
+                    display.innerHTML = '';
+                    itemsToShow = PAGE_SIZE;
+                    renderEmojis();
+                } catch(e) {
+                    display.innerHTML = '<div class="col-span-5 text-center text-xs text-red-500 py-4">فشل التحميل</div>';
+                }
+            }
         }
 
         function renderEmojis() {
@@ -367,7 +431,8 @@
                     post_id: postId,
                     text: text,
                     entities: entities,
-                    scheduled_at: schedule
+                    scheduled_at: schedule,
+                    channel_id: selectedChannelId
                 });
                 const res = await response.json();
                 if(res.status === 'success') {

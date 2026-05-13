@@ -34,6 +34,7 @@ class Post(Base):
     __tablename__ = 'posts'
     id = Column(Integer, primary_key=True)
     creator_id = Column(BigInteger, nullable=False)
+    channel_id = Column(BigInteger, nullable=True) # Target channel
     text = Column(Text, nullable=True)
     media_file_id = Column(String, nullable=True)
     media_type = Column(String, nullable=True) # photo, video, etc.
