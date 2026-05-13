@@ -1,5 +1,5 @@
 from aiogram import Router, F, types
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
@@ -62,7 +62,7 @@ async def cmd_start(message: types.Message, state: FSMContext, is_admin: bool = 
     except Exception:
         pass
 
-@router.message(F.photo | F.video | F.text)
+@router.message(StateFilter(None), F.photo | F.video | F.text)
 async def handle_post_content(message: types.Message, is_admin: bool = False):
     if not is_admin: return
 
@@ -108,6 +108,8 @@ async def manage_admins(callback: types.CallbackQuery, state: FSMContext, is_own
     if not is_owner: return
 
     await state.set_state(BotStates.waiting_for_admin)
+    kb = [[InlineKeyboardButton(text="❌ إلغاء", callback_data="cancel_operation")]]
+
     async with AsyncSessionLocal() as session:
         stmt = select(Admin).where(Admin.is_owner == False)
         admins = (await session.execute(stmt)).scalars().all()
@@ -119,9 +121,9 @@ async def manage_admins(callback: types.CallbackQuery, state: FSMContext, is_own
         text += f"- `{admin.user_id}` {f'(@{admin.username})' if admin.username else ''} /remove_{admin.user_id}\n"
 
     text += "\n➕ لإضافة مسؤول جديد، أرسل اليوزر الخاص به مباشرة (مثال: @username) أو المعرف (ID)."
-    await callback.message.answer(text, parse_mode="Markdown")
+    await callback.message.answer(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-@router.message(BotStates.waiting_for_admin)
+@router.message(BotStates.waiting_for_admin, F.text)
 async def handle_admin_addition_state(message: types.Message, state: FSMContext, is_owner: bool = False):
     if not is_owner: return
 
@@ -165,6 +167,10 @@ async def handle_admin_addition_state(message: types.Message, state: FSMContext,
         logging.error(f"Unexpected error in admin addition: {e}")
         await message.answer(f"❌ حدث خطأ غير متوقع.")
 
+@router.message(BotStates.waiting_for_admin)
+async def handle_admin_addition_wrong_content(message: types.Message):
+    await message.answer("⚠️ يرجى إرسال اليوزر أو المعرف كنص، أو اضغط على إلغاء.")
+
 # Remove legacy handlers that were not state-based
 
 @router.message(F.text.startswith("/remove_"))
@@ -189,9 +195,11 @@ async def remove_admin(message: types.Message, is_owner: bool = False):
 async def manage_channels(callback: types.CallbackQuery, state: FSMContext, is_owner: bool = False):
     if not is_owner: return
     await state.set_state(BotStates.waiting_for_channel)
-    await callback.message.answer("لإضافة قناة جديدة، قم بإرسال رابط القناة أو اليوزر الخاص بها مباشرة.\nمثال: @mychannel أو https://t.me/mychannel")
+    kb = [[InlineKeyboardButton(text="❌ إلغاء", callback_data="cancel_operation")]]
+    await callback.message.answer("لإضافة قناة جديدة، قم بإرسال رابط القناة أو اليوزر الخاص بها مباشرة.\nمثال: @mychannel أو https://t.me/mychannel",
+                                 reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-@router.message(BotStates.waiting_for_channel)
+@router.message(BotStates.waiting_for_channel, F.text)
 async def handle_channel_addition_state(message: types.Message, state: FSMContext, is_owner: bool = False):
     if not is_owner: return
 
@@ -254,12 +262,16 @@ async def handle_channel_addition_state(message: types.Message, state: FSMContex
 
             await session.commit()
 
-        await message.answer(f"✅ تم إضافة القناة بنجاح ويمكن الآن النشر فيها\n\nاسم القناة: **{title}**")
+        await message.answer(f"✅ تم ربط القناة بنجاح\n\nاسم القناة: **{title}**")
         await state.clear()
     except Exception as e:
         import logging
         logging.error(f"Unexpected error in channel addition: {e}")
         await message.answer(f"❌ حدث خطأ غير متوقع.")
+
+@router.message(BotStates.waiting_for_channel)
+async def handle_channel_addition_wrong_content(message: types.Message):
+    await message.answer("⚠️ يرجى إرسال رابط القناة أو اليوزر كنص، أو اضغط على إلغاء.")
 
 async def handle_channel_link(message: types.Message, is_owner: bool = False):
     # This is a fallback for legacy calls if any, we'll keep it simple
@@ -267,6 +279,12 @@ async def handle_channel_link(message: types.Message, is_owner: bool = False):
     # We can just redirect to the state handler if we want, or implement it here too.
     # But for simplicity, we'll just advise using the button.
     await message.answer("يرجى استخدام الأزرار من القائمة الرئيسية لإضافة القناة.")
+
+@router.callback_query(F.data == "cancel_operation")
+async def cancel_operation(callback: types.CallbackQuery, state: FSMContext, is_admin: bool = False, is_owner: bool = False):
+    await state.clear()
+    await callback.answer("تم الإلغاء")
+    await cmd_start(callback.message, state, is_admin=is_admin, is_owner=is_owner)
 
 @router.message(Command("import_emojis"))
 async def import_emojis(message: types.Message, is_owner: bool = False):
