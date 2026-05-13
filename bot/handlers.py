@@ -46,12 +46,8 @@ async def cmd_start(message: types.Message, state: FSMContext, is_admin: bool = 
         webapp_url = get_webapp_url()
 
         kb = []
-        # Ensure the button always appears if a URL exists, regardless of placeholder check if needed,
-        # but here we follow get_webapp_url logic
-        url = webapp_url or os.getenv("WEBAPP_URL")
-
-        if url:
-            kb.append([InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=url))])
+        if webapp_url:
+            kb.append([InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=webapp_url))])
 
         if is_owner:
             kb.append([InlineKeyboardButton(text="إعدادات القنوات 📺", callback_data="settings_channels")])
