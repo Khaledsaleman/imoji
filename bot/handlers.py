@@ -41,24 +41,15 @@ async def cmd_start(message: types.Message, is_admin: bool = False, is_owner: bo
         kb = []
         if webapp_url:
             kb.append([InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=webapp_url))])
-        else:
-            kb.append([InlineKeyboardButton(text="⚠️ يرجى ضبط رابط الـ WebApp أولاً", callback_data="webapp_error")])
 
         if is_owner:
             kb.append([InlineKeyboardButton(text="إعدادات القنوات 📺", callback_data="settings_channels")])
             kb.append([InlineKeyboardButton(text="إدارة الأدمنز 👥", callback_data="settings_admins")])
 
         msg = "أهلاً بك في لوحة التحكم!"
-        if not webapp_url:
-            msg += "\n\n⚠️ **تنبيه:** لم يتم ضبط رابط الـ WebApp بشكل صحيح في إعدادات Render. يرجى مراجعة ملف التعليمات RENDER_GUIDE_AR.md"
-
         await message.answer(msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    except Exception as e:
-        await message.answer(f"❌ حدث خطأ أثناء تشغيل البوت: {e}")
-
-@router.callback_query(F.data == "webapp_error")
-async def webapp_error(callback: types.CallbackQuery):
-    await callback.answer("الرابط غير مضبوط! يرجى إضافة WEBAPP_URL في إعدادات Render.", show_alert=True)
+    except Exception:
+        pass
 
 @router.message(F.photo | F.video | F.text)
 async def handle_post_content(message: types.Message, is_admin: bool = False):
@@ -66,7 +57,6 @@ async def handle_post_content(message: types.Message, is_admin: bool = False):
 
     webapp_url = get_webapp_url()
     if not webapp_url:
-        await message.answer("⚠️ لا يمكن تعديل المنشور لأن رابط الـ WebApp غير مضبوط. يرجى ضبطه في إعدادات Render أولاً.")
         return
 
     media_file_id = None
