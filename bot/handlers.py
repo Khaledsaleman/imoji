@@ -1,5 +1,7 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from database.models import AsyncSessionLocal, Admin, Channel, CustomEmoji, Post
 from sqlalchemy import select, insert, delete, update
@@ -7,6 +9,10 @@ import os
 import json
 
 router = Router()
+
+class BotStates(StatesGroup):
+    waiting_for_channel = State()
+    waiting_for_admin = State()
 
 def get_webapp_url():
     url = os.getenv("WEBAPP_URL")
@@ -34,13 +40,18 @@ async def cmd_config(message: types.Message, is_owner: bool = False):
     await message.answer(text, parse_mode="Markdown")
 
 @router.message(Command("start"))
-async def cmd_start(message: types.Message, is_admin: bool = False, is_owner: bool = False):
+async def cmd_start(message: types.Message, state: FSMContext, is_admin: bool = False, is_owner: bool = False):
     try:
+        await state.clear()
         webapp_url = get_webapp_url()
 
         kb = []
-        if webapp_url:
-            kb.append([InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=webapp_url))])
+        # Ensure the button always appears if a URL exists, regardless of placeholder check if needed,
+        # but here we follow get_webapp_url logic
+        url = webapp_url or os.getenv("WEBAPP_URL")
+
+        if url:
+            kb.append([InlineKeyboardButton(text="فتح محرر المنشورات 📝", web_app=WebAppInfo(url=url))])
 
         if is_owner:
             kb.append([InlineKeyboardButton(text="إعدادات القنوات 📺", callback_data="settings_channels")])
@@ -93,9 +104,10 @@ async def handle_post_content(message: types.Message, is_admin: bool = False):
 
 # Admin Management
 @router.callback_query(F.data == "settings_admins")
-async def manage_admins(callback: types.CallbackQuery, is_owner: bool = False):
+async def manage_admins(callback: types.CallbackQuery, state: FSMContext, is_owner: bool = False):
     if not is_owner: return
 
+    await state.set_state(BotStates.waiting_for_admin)
     async with AsyncSessionLocal() as session:
         stmt = select(Admin).where(Admin.is_owner == False)
         admins = (await session.execute(stmt)).scalars().all()
@@ -109,24 +121,34 @@ async def manage_admins(callback: types.CallbackQuery, is_owner: bool = False):
     text += "\n➕ لإضافة مسؤول جديد، أرسل اليوزر الخاص به مباشرة (مثال: @username) أو المعرف (ID)."
     await callback.message.answer(text, parse_mode="Markdown")
 
-@router.message(F.text.startswith("@") & ~F.text.contains("t.me/"))
-async def handle_admin_management(message: types.Message, is_owner: bool = False):
+@router.message(BotStates.waiting_for_admin)
+async def handle_admin_addition_state(message: types.Message, state: FSMContext, is_owner: bool = False):
     if not is_owner: return
-    # This handler is likely to conflict with channel management if not careful.
-    # But since the user wants direct addition, we check if it's a user or channel.
 
     input_data = message.text.strip()
-    username = input_data.replace("@", "")
+    user_id = None
+    username = None
 
     try:
-        chat = await message.bot.get_chat(input_data)
-        if chat.type != "private":
-            # If it's not private, maybe it's a channel and should be handled by channel handler
-            # We'll let it fall through or handle it here if we can distinguish
-            if chat.type in ["channel", "supergroup"]:
-                return await handle_channel_link(message, is_owner)
+        if input_data.startswith("@"):
+            username = input_data.replace("@", "")
+            try:
+                chat = await message.bot.get_chat(input_data)
+                if chat.type != "private":
+                    await message.answer("❌ هذا اليوزر ليس لمستخدم (Private User).")
+                    return
+                user_id = chat.id
+            except Exception as e:
+                import logging
+                logging.error(f"Error fetching user {input_data}: {e}")
+                await message.answer("❌ لم أتمكن من العثور على المستخدم عبر اليوزر. تأكد من اليوزر.")
+                return
+        elif input_data.isdigit():
+            user_id = int(input_data)
+        else:
+            await message.answer("❌ يرجى إرسال يوزر صحيح (@username) أو معرف (ID).")
+            return
 
-        user_id = chat.id
         async with AsyncSessionLocal() as session:
             stmt = select(Admin).where(Admin.user_id == user_id)
             existing = (await session.execute(stmt)).scalar_one_or_none()
@@ -136,27 +158,14 @@ async def handle_admin_management(message: types.Message, is_owner: bool = False
             else:
                 session.add(Admin(user_id=user_id, username=username))
                 await session.commit()
-                await message.answer(f"✅ تم إضافة الأدمن بنجاح\n\nيوزر: @{username}\nID: `{user_id}`")
+                await message.answer(f"✅ تم إضافة الأدمن بنجاح\n\nID: `{user_id}`" + (f"\nيوزر: @{username}" if username else ""))
+                await state.clear()
     except Exception as e:
-        await message.answer(f"❌ لم أتمكن من العثور على المستخدم. تأكد من أن اليوزر صحيح. الخطأ: {e}")
+        import logging
+        logging.error(f"Unexpected error in admin addition: {e}")
+        await message.answer(f"❌ حدث خطأ غير متوقع.")
 
-@router.message(F.text.regexp(r"^\d+$"))
-async def handle_admin_id(message: types.Message, is_owner: bool = False):
-    if not is_owner: return
-    try:
-        user_id = int(message.text.strip())
-        async with AsyncSessionLocal() as session:
-            stmt = select(Admin).where(Admin.user_id == user_id)
-            existing = (await session.execute(stmt)).scalar_one_or_none()
-
-            if existing:
-                await message.answer("ℹ️ هذا المستخدم مضاف بالفعل كمسؤول.")
-            else:
-                session.add(Admin(user_id=user_id))
-                await session.commit()
-                await message.answer(f"✅ تم إضافة الأدمن بنجاح\n\nID: `{user_id}`")
-    except Exception as e:
-        await message.answer(f"❌ خطأ: {e}")
+# Remove legacy handlers that were not state-based
 
 @router.message(F.text.startswith("/remove_"))
 async def remove_admin(message: types.Message, is_owner: bool = False):
@@ -177,25 +186,23 @@ async def remove_admin(message: types.Message, is_owner: bool = False):
 
 # Channel Management
 @router.callback_query(F.data == "settings_channels")
-async def manage_channels(callback: types.CallbackQuery, is_owner: bool = False):
+async def manage_channels(callback: types.CallbackQuery, state: FSMContext, is_owner: bool = False):
     if not is_owner: return
+    await state.set_state(BotStates.waiting_for_channel)
     await callback.message.answer("لإضافة قناة جديدة، قم بإرسال رابط القناة أو اليوزر الخاص بها مباشرة.\nمثال: @mychannel أو https://t.me/mychannel")
 
-@router.message(F.text.contains("t.me/"))
-async def handle_channel_url(message: types.Message, is_owner: bool = False):
+@router.message(BotStates.waiting_for_channel)
+async def handle_channel_addition_state(message: types.Message, state: FSMContext, is_owner: bool = False):
     if not is_owner: return
+
     link = message.text.strip()
     if "t.me/" in link:
-        # Extract username or handle private links if possible (though get_chat usually needs username/ID)
         parts = link.split("t.me/")[1].split("/")
         if parts[0] == "c":
-            # Private channel link t.me/c/12345/678
             await message.answer("⚠️ يرجى إرسال يوزر القناة العام أو ID القناة. الروابط الخاصة غير مدعومة حالياً عبر الرابط.")
             return
         link = "@" + parts[0]
-    await process_channel_addition(message, link)
 
-async def process_channel_addition(message: types.Message, link: str):
     try:
         try:
             chat = await message.bot.get_chat(link)
@@ -205,7 +212,9 @@ async def process_channel_addition(message: types.Message, link: str):
             channel_id = chat.id
             title = chat.title
         except Exception as e:
-            await message.answer(f"❌ لم أتمكن من العثور على القناة. تأكد من صحة الرابط وأنني عضو فيها. الخطأ: {e}")
+            import logging
+            logging.error(f"Error fetching channel {link}: {e}")
+            await message.answer(f"❌ لم أتمكن من العثور على القناة. تأكد من صحة الرابط وأنني عضو فيها.")
             return
 
         # Verify if bot is admin in the channel
@@ -214,16 +223,20 @@ async def process_channel_addition(message: types.Message, link: str):
             if member.status not in ["administrator", "creator"]:
                 await message.answer(f"❌ البوت ليس مسؤولاً في القناة '{title}'. يرجى رفعه لمسؤول أولاً.")
                 return
+
+            if member.status == "administrator" and not member.can_post_messages:
+                await message.answer(f"❌ البوت مسؤول في القناة ولكن ليس لديه صلاحية 'نشر الرسائل'. يرجى تفعيلها.")
+                return
         except Exception as e:
-            await message.answer(f"❌ لا يمكنني التحقق من صلاحياتي في القناة. الخطأ: {e}")
+            import logging
+            logging.error(f"Error checking bot permissions in {channel_id}: {e}")
+            await message.answer(f"❌ لا يمكنني التحقق من صلاحياتي في القناة.")
             return
 
         async with AsyncSessionLocal() as session:
-            # Check active channels count
             stmt_count = select(Channel).where(Channel.is_active == True)
             active_channels = (await session.execute(stmt_count)).scalars().all()
 
-            # Check if exists
             stmt = select(Channel).where(Channel.channel_id == channel_id)
             existing = (await session.execute(stmt)).scalar_one_or_none()
 
@@ -233,23 +246,27 @@ async def process_channel_addition(message: types.Message, link: str):
                     return
                 existing.is_active = True
                 existing.title = title
-                await session.commit()
             else:
                 if len(active_channels) >= 5:
                     await message.answer("⚠️ وصلت للحد الأقصى من القنوات النشطة (5 قنوات). يرجى تعطيل قناة قبل إضافة جديدة.")
                     return
                 session.add(Channel(channel_id=channel_id, title=title, is_active=True))
-                await session.commit()
+
+            await session.commit()
 
         await message.answer(f"✅ تم إضافة القناة بنجاح ويمكن الآن النشر فيها\n\nاسم القناة: **{title}**")
+        await state.clear()
     except Exception as e:
-        await message.answer(f"❌ حدث خطأ غير متوقع: {e}")
+        import logging
+        logging.error(f"Unexpected error in channel addition: {e}")
+        await message.answer(f"❌ حدث خطأ غير متوقع.")
 
-# Missing handle_channel_link which was being called from handle_admin_management
 async def handle_channel_link(message: types.Message, is_owner: bool = False):
+    # This is a fallback for legacy calls if any, we'll keep it simple
     if not is_owner: return
-    link = message.text.strip()
-    await process_channel_addition(message, link)
+    # We can just redirect to the state handler if we want, or implement it here too.
+    # But for simplicity, we'll just advise using the button.
+    await message.answer("يرجى استخدام الأزرار من القائمة الرئيسية لإضافة القناة.")
 
 @router.message(Command("import_emojis"))
 async def import_emojis(message: types.Message, is_owner: bool = False):
