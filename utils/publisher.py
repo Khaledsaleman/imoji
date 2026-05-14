@@ -31,12 +31,15 @@ async def publish_post(bot: Bot, post_id: int):
         entities = []
         if post.entities_json:
             entities_data = json.loads(post.entities_json)
+            # Sort entities by offset as required by Telegram
+            entities_data.sort(key=lambda x: x['offset'])
+
             for ent in entities_data:
                 entities.append(MessageEntity(
                     type=ent['type'],
                     offset=ent['offset'],
                     length=ent['length'],
-                    custom_emoji_id=ent.get('custom_emoji_id')
+                    custom_emoji_id=str(ent.get('custom_emoji_id')) if ent.get('custom_emoji_id') else None
                 ))
 
         try:

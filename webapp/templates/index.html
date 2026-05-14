@@ -374,7 +374,7 @@
                 }
 
                 if (emojiId) {
-                    btn.onclick = () => insertEmoji(emojiId, emoji.is_lottie ? "🦆" : emojiText);
+                    btn.onclick = () => insertEmoji(emojiId, emojiText);
                 } else {
                     btn.classList.add('opacity-50', 'cursor-not-allowed');
                 }
