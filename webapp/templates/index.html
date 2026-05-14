@@ -6,6 +6,7 @@
     <title>محرر المنشورات الاحترافي</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -291,11 +292,14 @@
             }
         }
 
+        let activeGroupName = '';
+
         async function showGroup(groupName, index) {
             const container = document.getElementById('emoji-container');
             const display = document.getElementById('emoji-display');
             const nameEl = document.getElementById('active-group-name');
 
+            activeGroupName = groupName;
             nameEl.innerText = groupName;
             display.innerHTML = '<div class="col-span-5 text-center text-xs text-tg-hint py-4 flex flex-col items-center gap-2"><span>جاري التحميل...</span><div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>';
 
@@ -336,22 +340,54 @@
             const emojisToRender = currentGroupEmojis.slice(display.childElementCount, itemsToShow);
 
             emojisToRender.forEach(emoji => {
-                const btn = document.createElement('button');
-                btn.className = 'emoji-card h-12 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 text-2xl hover:bg-blue-500/20 active:bg-blue-500';
+                const container = document.createElement('div');
+                container.className = 'flex flex-col items-center gap-1';
 
-                // Fallback for missing text or ID
+                const btn = document.createElement('button');
+                btn.className = 'emoji-card w-full h-16 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 hover:bg-blue-500/20 active:bg-blue-500 overflow-hidden relative';
+
                 const emojiId = emoji.custom_emoji_id || emoji.id || emoji.emoji_id;
                 const emojiText = emoji.text || "✨";
+                const uniqueId = emoji.unique_id || `id_${emojiId}`;
 
-                btn.innerText = emojiText;
+                if (emoji.is_lottie) {
+                    const lottieDiv = document.createElement('div');
+                    lottieDiv.className = 'w-10 h-10';
+                    btn.appendChild(lottieDiv);
+
+                    // Load animation
+                    lottie.loadAnimation({
+                        container: lottieDiv,
+                        renderer: 'svg',
+                        loop: true,
+                        autoplay: true,
+                        path: `/api/emoji_raw/${encodeURIComponent(activeGroupName)}/${emojiId}`
+                    });
+                } else {
+                    const textSpan = document.createElement('span');
+                    textSpan.className = 'text-2xl';
+                    textSpan.innerText = emojiText;
+                    btn.appendChild(textSpan);
+                }
 
                 if (emojiId) {
-                    btn.onclick = () => insertEmoji(emojiId, emojiText);
+                    btn.onclick = () => insertEmoji(emojiId, emoji.is_lottie ? "🖼️" : emojiText);
                 } else {
                     btn.classList.add('opacity-50', 'cursor-not-allowed');
                 }
 
-                display.appendChild(btn);
+                const idLabel = document.createElement('span');
+                idLabel.className = 'text-[8px] text-tg-hint font-mono truncate w-full text-center';
+                idLabel.innerText = `ID: ${emojiId}`;
+
+                const uniqueLabel = document.createElement('span');
+                uniqueLabel.className = 'text-[7px] text-blue-500/50 font-mono truncate w-full text-center';
+                uniqueLabel.innerText = uniqueId;
+
+                container.appendChild(btn);
+                container.appendChild(idLabel);
+                container.appendChild(uniqueLabel);
+                display.appendChild(container);
             });
         }
 
