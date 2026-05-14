@@ -137,8 +137,7 @@ async def get_channel_photo(channel_id: int):
         logging.error(f"Error downloading photo: {e}")
         raise HTTPException(status_code=404, detail="Photo not found")
 
-@app.post("/save_post")
-async def save_post(data: dict, db=Depends(get_db)):
+async def _save_post_data(data: dict, db):
     post_id = data.get("post_id")
     text = data.get("text")
     entities = data.get("entities", [])
@@ -157,21 +156,38 @@ async def save_post(data: dict, db=Depends(get_db)):
         "scheduled_at": dt_scheduled
     }
     if channel_id:
-        update_vals["channel_id"] = int(channel_id)
+        try:
+            update_vals["channel_id"] = int(channel_id)
+        except: pass
 
-    q = update(Post).where(Post.id == post_id).values(**update_vals)
+    q = update(Post).where(Post.id == int(post_id)).values(**update_vals)
     await db.execute(q)
     await db.commit()
-    return {"status": "success"}
+    return post_id
+
+@app.post("/save_post")
+async def save_post_api(data: dict, db=Depends(get_db)):
+    try:
+        await _save_post_data(data, db)
+        return {"status": "success"}
+    except Exception as e:
+        logging.error(f"Error in save_post_api: {e}")
+        return {"status": "error", "message": str(e)}
 
 @app.post("/publish_now")
 async def publish_now_api(data: dict, db=Depends(get_db)):
-    post_id = data.get("post_id")
-    bot = get_bot()
-    if not bot:
-        return {"status": "error", "message": "Bot token not configured"}
+    try:
+        # First save the content to ensure we publish the latest version
+        post_id = await _save_post_data(data, db)
 
-    success = await publish_post(bot, int(post_id))
-    if success:
-        return {"status": "success"}
-    return {"status": "error", "message": "فشل النشر"}
+        bot = get_bot()
+        if not bot:
+            return {"status": "error", "message": "Bot token not configured"}
+
+        success = await publish_post(bot, int(post_id))
+        if success:
+            return {"status": "success"}
+        return {"status": "error", "message": "فشل النشر"}
+    except Exception as e:
+        logging.error(f"Error in publish_now_api: {e}")
+        return {"status": "error", "message": str(e)}

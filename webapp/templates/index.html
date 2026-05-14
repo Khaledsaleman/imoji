@@ -371,7 +371,7 @@
                 }
 
                 if (emojiId) {
-                    btn.onclick = () => insertEmoji(emojiId, emoji.is_lottie ? "🖼️" : emojiText);
+                    btn.onclick = () => insertEmoji(emojiId, emoji.is_lottie ? "🦆" : emojiText);
                 } else {
                     btn.classList.add('opacity-50', 'cursor-not-allowed');
                 }
@@ -504,14 +504,29 @@
         async function publishNow() {
             tg.showConfirm("هل أنت متأكد من رغبتك في نشر المنشور الآن؟", async (ok) => {
                 if(ok) {
-                    await saveDraft();
-                    const response = await apiRequest('/publish_now', { post_id: postId });
-                    const res = await response.json();
-                    if(res.status === 'success') {
-                        tg.HapticFeedback.notificationOccurred('success');
-                        tg.close();
-                    } else {
-                        tg.showAlert("فشل النشر: " + res.message);
+                    tg.MainButton.showProgress();
+                    const text = document.getElementById('post-text').value;
+                    const schedule = document.getElementById('schedule-time').value;
+
+                    try {
+                        const response = await apiRequest('/publish_now', {
+                            post_id: postId,
+                            text: text,
+                            entities: entities,
+                            scheduled_at: schedule,
+                            channel_id: selectedChannelId
+                        });
+                        const res = await response.json();
+                        if(res.status === 'success') {
+                            tg.HapticFeedback.notificationOccurred('success');
+                            tg.close();
+                        } else {
+                            tg.showAlert("فشل النشر: " + res.message);
+                        }
+                    } catch(e) {
+                        tg.showAlert("حدث خطأ أثناء النشر");
+                    } finally {
+                        tg.MainButton.hideProgress();
                     }
                 }
             });
