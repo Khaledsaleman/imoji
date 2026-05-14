@@ -219,7 +219,7 @@
 
         let entities = [];
         let selectedChannelId = '{{ post.channel_id if post and post.channel_id else "" }}';
-        const postId = new URLSearchParams(window.location.search).get('post_id');
+        let postId = new URLSearchParams(window.location.search).get('post_id');
         const emojiGroups = {{ emoji_groups | tojson }};
 
         let currentGroupEmojis = [];
@@ -491,6 +491,9 @@
                 });
                 const res = await response.json();
                 if(res.status === 'success') {
+                    if (res.post_id) {
+                        postId = res.post_id;
+                    }
                     tg.HapticFeedback.notificationOccurred('success');
                     tg.showAlert("تم حفظ المسودة بنجاح! ✨");
                 }
