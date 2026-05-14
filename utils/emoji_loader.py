@@ -45,7 +45,7 @@ def scan_emojis(base_paths=["emojis", "imoji/emojis"]):
                         if is_lottie:
                             group_emojis.append({
                                 "custom_emoji_id": file_id,
-                                "text": "🖼️", # Placeholder for Lottie
+                                "text": "🦆", # Better placeholder for Lottie
                                 "is_lottie": True,
                                 "unique_id": f"duck_{file_id}"
                             })
