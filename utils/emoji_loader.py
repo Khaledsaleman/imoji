@@ -6,6 +6,22 @@ from database.models import AsyncSessionLocal, CustomEmoji
 from sqlalchemy import select
 
 _emoji_cache = None
+_mapping_cache = None
+
+def load_mapping():
+    global _mapping_cache
+    if _mapping_cache is not None:
+        return _mapping_cache
+
+    mapping_path = "utils/emoji_mapping.json"
+    if os.path.exists(mapping_path):
+        try:
+            with open(mapping_path, "r") as f:
+                _mapping_cache = json.load(f)
+                return _mapping_cache
+        except Exception as e:
+            logging.error(f"Error loading emoji mapping: {e}")
+    return {}
 
 def scan_emojis(base_paths=["emojis", "imoji/emojis"]):
     global _emoji_cache
@@ -13,6 +29,7 @@ def scan_emojis(base_paths=["emojis", "imoji/emojis"]):
         return _emoji_cache
 
     groups = {}
+    mapping = load_mapping()
 
     for base_path in base_paths:
         if not os.path.exists(base_path):
@@ -43,8 +60,11 @@ def scan_emojis(base_paths=["emojis", "imoji/emojis"]):
                         is_lottie = "tgs" in data or "layers" in data
 
                         if is_lottie:
+                            # Use mapping if available for this group and file
+                            real_id = mapping.get(folder, {}).get(file_id, file_id)
                             group_emojis.append({
-                                "custom_emoji_id": file_id,
+                                "custom_emoji_id": real_id,
+                                "file_id": file_id, # Keep original filename for raw data fetch
                                 "text": "🦆", # Better placeholder for Lottie
                                 "is_lottie": True,
                                 "unique_id": f"duck_{file_id}"
