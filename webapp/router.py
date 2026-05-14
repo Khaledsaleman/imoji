@@ -72,6 +72,22 @@ async def get_group_emojis(group_name: str):
         raise HTTPException(status_code=404, detail="Group not found")
     return group["emojis"]
 
+@app.get("/api/emoji_raw/{group_name}/{emoji_id}")
+async def get_emoji_raw(group_name: str, emoji_id: str):
+    # Security: check if group and emoji_id look safe
+    if ".." in group_name or ".." in emoji_id:
+         raise HTTPException(status_code=400, detail="Invalid path")
+
+    # Check possible paths
+    paths = ["emojis", "imoji/emojis"]
+    for base in paths:
+        file_path = os.path.join(base, group_name, f"{emoji_id}.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                return json.load(f)
+
+    raise HTTPException(status_code=404, detail="Emoji file not found")
+
 @app.get("/api/channels")
 async def get_channels(db=Depends(get_db)):
     result = await db.execute(select(Channel).where(Channel.is_active == True))
