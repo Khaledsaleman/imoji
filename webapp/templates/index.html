@@ -355,13 +355,16 @@
                     lottieDiv.className = 'w-10 h-10';
                     btn.appendChild(lottieDiv);
 
+                    // Use file_id for raw data, emojiId for custom_emoji_id
+                    const previewId = emoji.file_id || emojiId;
+
                     // Load animation
                     lottie.loadAnimation({
                         container: lottieDiv,
                         renderer: 'svg',
                         loop: true,
                         autoplay: true,
-                        path: `/api/emoji_raw/${encodeURIComponent(activeGroupName)}/${emojiId}`
+                        path: `/api/emoji_raw/${encodeURIComponent(activeGroupName)}/${previewId}`
                     });
                 } else {
                     const textSpan = document.createElement('span');
