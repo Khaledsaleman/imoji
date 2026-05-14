@@ -137,7 +137,7 @@ async def get_channel_photo(channel_id: int):
         logging.error(f"Error downloading photo: {e}")
         raise HTTPException(status_code=404, detail="Photo not found")
 
-async def _save_post_data(data: dict, db):
+async def _save_post_data(data: dict, db, user_id: int = None):
     post_id = data.get("post_id")
     text = data.get("text")
     entities = data.get("entities", [])
@@ -150,35 +150,52 @@ async def _save_post_data(data: dict, db):
             dt_scheduled = datetime.datetime.fromisoformat(scheduled_at)
         except: pass
 
-    update_vals = {
-        "text": text,
-        "entities_json": json.dumps(entities),
-        "scheduled_at": dt_scheduled
-    }
-    if channel_id:
-        try:
-            update_vals["channel_id"] = int(channel_id)
-        except: pass
+    if post_id and str(post_id).isdigit():
+        # Update existing post
+        update_vals = {
+            "text": text,
+            "entities_json": json.dumps(entities),
+            "scheduled_at": dt_scheduled
+        }
+        if channel_id:
+            try:
+                update_vals["channel_id"] = int(channel_id)
+            except: pass
 
-    q = update(Post).where(Post.id == int(post_id)).values(**update_vals)
-    await db.execute(q)
-    await db.commit()
-    return post_id
+        q = update(Post).where(Post.id == int(post_id)).values(**update_vals)
+        await db.execute(q)
+        await db.commit()
+        return int(post_id)
+    else:
+        # Create new post
+        new_post = Post(
+            creator_id=user_id or 0,
+            text=text,
+            entities_json=json.dumps(entities),
+            scheduled_at=dt_scheduled,
+            channel_id=int(channel_id) if channel_id else None
+        )
+        db.add(new_post)
+        await db.commit()
+        await db.refresh(new_post)
+        return new_post.id
 
 @app.post("/save_post")
-async def save_post_api(data: dict, db=Depends(get_db)):
+async def save_post_api(data: dict, x_telegram_init_data: str = Header(None, alias="X-Telegram-Init-Data"), db=Depends(get_db)):
     try:
-        await _save_post_data(data, db)
-        return {"status": "success"}
+        user_id = get_user_id_from_init_data(x_telegram_init_data)
+        new_id = await _save_post_data(data, db, user_id)
+        return {"status": "success", "post_id": new_id}
     except Exception as e:
         logging.error(f"Error in save_post_api: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.post("/publish_now")
-async def publish_now_api(data: dict, db=Depends(get_db)):
+async def publish_now_api(data: dict, x_telegram_init_data: str = Header(None, alias="X-Telegram-Init-Data"), db=Depends(get_db)):
     try:
+        user_id = get_user_id_from_init_data(x_telegram_init_data)
         # First save the content to ensure we publish the latest version
-        post_id = await _save_post_data(data, db)
+        post_id = await _save_post_data(data, db, user_id)
 
         bot = get_bot()
         if not bot:
