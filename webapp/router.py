@@ -13,9 +13,17 @@ import os
 import datetime
 import logging
 
+# Ensure required directories exist
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
+
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="webapp/static"), name="static")
-templates = Jinja2Templates(directory="webapp/templates")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Lazy bot initialization
 _bot = None
