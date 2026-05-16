@@ -15,7 +15,7 @@ async def check_scheduled_posts(bot: Bot):
         )
         posts = result.scalars().all()
         for post in posts:
-            await publish_post(bot, post.id)
+            await publish_post(bot, post.id, is_automatic=True)
 
 def start_scheduler(bot: Bot):
     scheduler.add_job(check_scheduled_posts, "interval", minutes=1, args=[bot])

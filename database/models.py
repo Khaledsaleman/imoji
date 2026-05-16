@@ -39,6 +39,8 @@ class Post(Base):
     media_file_id = Column(String, nullable=True)
     media_type = Column(String, nullable=True) # photo, video, etc.
     entities_json = Column(Text, nullable=True) # Store JSON of entities
+    preview_message_id = Column(BigInteger, nullable=True)
+    preview_chat_id = Column(BigInteger, nullable=True)
     scheduled_at = Column(DateTime, nullable=True)
     is_published = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

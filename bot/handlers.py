@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from database.models import AsyncSessionLocal, Admin, Channel, CustomEmoji, Post
 from sqlalchemy import select, insert, delete, update
+from utils.publisher import perform_copy_to_channel
 import os
 import json
 
@@ -275,6 +276,25 @@ async def handle_channel_link(message: types.Message, is_owner: bool = False):
     # We can just redirect to the state handler if we want, or implement it here too.
     # But for simplicity, we'll just advise using the button.
     await message.answer("يرجى استخدام الأزرار من القائمة الرئيسية لإضافة القناة.")
+
+@router.callback_query(F.data.startswith("publish_to_channel:"))
+async def handle_publish_button(callback: types.CallbackQuery, is_admin: bool = False):
+    if not is_admin:
+        await callback.answer("⚠️ غير مصرح لك.", show_alert=True)
+        return
+
+    try:
+        post_id = int(callback.data.split(":")[1])
+        success = await perform_copy_to_channel(callback.bot, post_id)
+
+        if success:
+            await callback.answer("✅ تم النشر بنجاح")
+        else:
+            await callback.answer("❌ فشل النشر. تأكد من إعدادات القناة.", show_alert=True)
+    except Exception as e:
+        import logging
+        logging.error(f"Error in handle_publish_button: {e}")
+        await callback.answer("❌ حدث خطأ تقني.", show_alert=True)
 
 @router.callback_query(F.data == "cancel_operation")
 async def cancel_operation(callback: types.CallbackQuery, state: FSMContext, is_admin: bool = False, is_owner: bool = False):
