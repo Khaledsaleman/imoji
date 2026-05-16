@@ -68,7 +68,7 @@ async def test_perform_copy_to_channel(monkeypatch):
     success = await perform_copy_to_channel(bot, 1)
 
     assert success is True
-    bot.copy_message.assert_called_once_with(
+    bot.forward_message.assert_called_once_with(
         chat_id=999,
         from_chat_id=123,
         message_id=456
