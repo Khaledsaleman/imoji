@@ -26,7 +26,7 @@ async def perform_copy_to_channel(bot: Bot, post_id: int):
             return False
 
         try:
-            await bot.copy_message(
+            await bot.forward_message(
                 chat_id=target_channel_id,
                 from_chat_id=post.preview_chat_id,
                 message_id=post.preview_message_id
