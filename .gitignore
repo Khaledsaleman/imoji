@@ -5,3 +5,5 @@ bot_database.db
 .env
 webapp.log
 verification/
+.pytest_cache/
+*.db
