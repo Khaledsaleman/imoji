@@ -15,13 +15,15 @@ import logging
 
 # Ensure static and templates directories exist using absolute paths to prevent Render errors
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.abspath(os.path.join(BASE_DIR, "static"))
+TEMPLATES_DIR = os.path.abspath(os.path.join(BASE_DIR, "templates"))
 
+# Create directories if they don't exist
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
 app = FastAPI()
+# Use absolute paths for static files and templates
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
