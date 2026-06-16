@@ -46,6 +46,14 @@ class Post(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./bot_database.db")
+
+# Ensure SQLite relative paths are absolute for Render robustness
+if DATABASE_URL.startswith("sqlite+aiosqlite:///./"):
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    PROJECT_ROOT = os.path.dirname(BASE_DIR)
+    DB_FILE = DATABASE_URL.split("///./")[-1]
+    DATABASE_URL = f"sqlite+aiosqlite:///{os.path.join(PROJECT_ROOT, DB_FILE)}"
+
 engine = create_async_engine(DATABASE_URL, echo=True)
 AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
