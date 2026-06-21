@@ -14,10 +14,13 @@ import datetime
 import logging
 
 # Ensure static and templates directories exist using absolute paths to prevent Render errors
+# BASE_DIR is project_root/webapp/
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
+# Guarantee directories exist
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
@@ -89,7 +92,7 @@ async def get_emoji_raw(group_name: str, emoji_id: str):
     # Check possible paths
     paths = ["emojis", "imoji/emojis"]
     for base in paths:
-        file_path = os.path.join(base, group_name, f"{emoji_id}.json")
+        file_path = os.path.join(PROJECT_ROOT, base, group_name, f"{emoji_id}.json")
         if os.path.exists(file_path):
             with open(file_path, "r") as f:
                 return json.load(f)
