@@ -13,7 +13,10 @@ def load_mapping():
     if _mapping_cache is not None:
         return _mapping_cache
 
-    mapping_path = "utils/emoji_mapping.json"
+    # Use absolute path to project root
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mapping_path = os.path.join(base_dir, "utils", "emoji_mapping.json")
+
     if os.path.exists(mapping_path):
         try:
             with open(mapping_path, "r") as f:
@@ -31,7 +34,12 @@ def scan_emojis(base_paths=["emojis", "imoji/emojis"]):
     groups = {}
     mapping = load_mapping()
 
+    # Use absolute path to project root
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
     for base_path in base_paths:
+        # Resolve to absolute path
+        base_path = os.path.join(base_dir, base_path)
         if not os.path.exists(base_path):
             continue
 
