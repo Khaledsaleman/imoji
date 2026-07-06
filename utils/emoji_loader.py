@@ -8,12 +8,14 @@ from sqlalchemy import select
 _emoji_cache = None
 _mapping_cache = None
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def load_mapping():
     global _mapping_cache
     if _mapping_cache is not None:
         return _mapping_cache
 
-    mapping_path = "utils/emoji_mapping.json"
+    mapping_path = os.path.join(PROJECT_ROOT, "utils", "emoji_mapping.json")
     if os.path.exists(mapping_path):
         try:
             with open(mapping_path, "r") as f:
@@ -31,7 +33,10 @@ def scan_emojis(base_paths=["emojis", "imoji/emojis"]):
     groups = {}
     mapping = load_mapping()
 
-    for base_path in base_paths:
+    # Convert relative base_paths to absolute paths
+    abs_base_paths = [os.path.join(PROJECT_ROOT, bp) if not os.path.isabs(bp) else bp for bp in base_paths]
+
+    for base_path in abs_base_paths:
         if not os.path.exists(base_path):
             continue
 
