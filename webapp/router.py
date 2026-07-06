@@ -14,9 +14,10 @@ import datetime
 import logging
 
 # Ensure static and templates directories exist using absolute paths to prevent Render errors
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+WEBAPP_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(WEBAPP_DIR)
+STATIC_DIR = os.path.join(WEBAPP_DIR, "static")
+TEMPLATES_DIR = os.path.join(WEBAPP_DIR, "templates")
 
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
@@ -86,8 +87,8 @@ async def get_emoji_raw(group_name: str, emoji_id: str):
     if ".." in group_name or ".." in emoji_id:
          raise HTTPException(status_code=400, detail="Invalid path")
 
-    # Check possible paths
-    paths = ["emojis", "imoji/emojis"]
+    # Check possible paths using absolute resolution for Render reliability
+    paths = [os.path.join(PROJECT_ROOT, "emojis"), os.path.join(PROJECT_ROOT, "imoji/emojis")]
     for base in paths:
         file_path = os.path.join(base, group_name, f"{emoji_id}.json")
         if os.path.exists(file_path):
