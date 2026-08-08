@@ -8,14 +8,21 @@ from aiogram import Bot
 scheduler = AsyncIOScheduler()
 
 async def check_scheduled_posts(bot: Bot):
-    async with AsyncSessionLocal() as session:
-        now = datetime.datetime.utcnow()
-        result = await session.execute(
-            select(Post).where(Post.scheduled_at <= now, Post.is_published == False)
-        )
-        posts = result.scalars().all()
-        for post in posts:
-            await publish_post(bot, post.id, is_automatic=True)
+    import logging
+    try:
+        async with AsyncSessionLocal() as session:
+            now = datetime.datetime.utcnow()
+            result = await session.execute(
+                select(Post).where(Post.scheduled_at <= now, Post.is_published == False)
+            )
+            posts = result.scalars().all()
+            for post in posts:
+                try:
+                    await publish_post(bot, post.id, is_automatic=True)
+                except Exception as e:
+                    logging.error(f"Error publishing scheduled post {post.id}: {e}", exc_info=True)
+    except Exception as e:
+        logging.error(f"Error in scheduler check_scheduled_posts: {e}", exc_info=True)
 
 def start_scheduler(bot: Bot):
     scheduler.add_job(check_scheduled_posts, "interval", minutes=1, args=[bot])

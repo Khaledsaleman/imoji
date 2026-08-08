@@ -318,3 +318,27 @@ async def import_emojis(message: types.Message, is_owner: bool = False):
         await message.answer("تم استيراد الإيموجي بنجاح.")
     except Exception as e:
         await message.answer(f"خطأ في الاستيراد: {e}")
+
+@router.errors()
+async def global_error_handler(event: types.ErrorEvent):
+    from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
+    import logging
+
+    exception = event.exception
+    update = event.update
+
+    # Log the warning/error cleanly
+    if isinstance(exception, TelegramForbiddenError):
+        logging.warning(f"TelegramForbiddenError: Bot was blocked by user (403 Forbidden). Update details: {update}")
+        return True # Handled gracefully!
+
+    if isinstance(exception, TelegramAPIError):
+        if exception.code == 403:
+            logging.warning(f"TelegramAPIError (403 Forbidden): {exception.message}. Update details: {update}")
+            return True # Handled gracefully!
+
+        logging.error(f"TelegramAPIError in handler (code={exception.code}): {exception.message}", exc_info=exception)
+        return True # Handled gracefully!
+
+    logging.error(f"Unhandled exception in bot handlers: {exception}", exc_info=exception)
+    return True # Handled gracefully to prevent unhandled rejection/crash!
