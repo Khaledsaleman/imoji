@@ -8,6 +8,7 @@ from utils.publisher import publish_post
 from utils.auth import validate_init_data, get_user_id_from_init_data
 from utils.emoji_loader import scan_emojis, get_all_emojis
 from aiogram import Bot
+from aiogram.types import Update
 import json
 import os
 import datetime
@@ -29,6 +30,9 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 _bot = None
 
 def get_bot():
+    bot = getattr(app.state, "bot", None)
+    if bot is not None:
+        return bot
     global _bot
     if _bot is None:
         token = os.getenv("BOT_TOKEN")
@@ -41,6 +45,72 @@ def get_bot():
 async def get_db():
     async with AsyncSessionLocal() as db:
         yield db
+
+@app.post("/webhook/bot")
+async def telegram_webhook(request: Request):
+    bot = getattr(app.state, "bot", None)
+    dp = getattr(app.state, "dp", None)
+    if not bot or not dp:
+        logging.error("Webhook received but Bot or Dispatcher not initialized in app.state.")
+        raise HTTPException(status_code=503, detail="Bot or Dispatcher not initialized")
+
+    try:
+        update_data = await request.json()
+        update = Update.model_validate(update_data, context={"bot": bot})
+        await dp.feed_update(bot, update)
+        return {"status": "ok"}
+    except Exception as e:
+        logging.error(f"Error handling webhook update: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/health")
+async def health_check(db=Depends(get_db)):
+    status = {"database": "unknown", "bot_connectivity": "unknown"}
+
+    # 1. Check Database Connectivity
+    try:
+        from sqlalchemy import text
+        await db.execute(text("SELECT 1"))
+        status["database"] = "ok"
+    except Exception as e:
+        status["database"] = f"error: {str(e)}"
+        logging.error(f"Health check: Database check failed: {e}", exc_info=True)
+
+    # 2. Check Bot Connectivity
+    bot = get_bot()
+    if bot:
+        try:
+            me = await bot.get_me()
+            status["bot_connectivity"] = "ok"
+            status["bot_username"] = me.username
+
+            # Check webhook details
+            url_env = os.getenv("WEBAPP_URL")
+            if url_env and "your-webapp-url.com" not in url_env:
+                webhook_info = await bot.get_webhook_info()
+                status["webhook"] = {
+                    "enabled": True,
+                    "url": webhook_info.url,
+                    "pending_update_count": webhook_info.pending_update_count,
+                    "last_error_date": webhook_info.last_error_date,
+                    "last_error_message": webhook_info.last_error_message,
+                }
+            else:
+                status["webhook"] = {
+                    "enabled": False,
+                    "mode": "polling"
+                }
+        except Exception as e:
+            status["bot_connectivity"] = f"error: {str(e)}"
+            logging.error(f"Health check: Telegram Bot connectivity failed: {e}", exc_info=True)
+    else:
+        status["bot_connectivity"] = "not_configured"
+
+    # If database is down or bot has error (and is expected to be configured)
+    if "error" in status["database"] or "error" in status["bot_connectivity"]:
+        raise HTTPException(status_code=500, detail=status)
+
+    return status
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, post_id: int = None, db=Depends(get_db)):
