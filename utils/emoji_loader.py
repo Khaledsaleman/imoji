@@ -5,6 +5,10 @@ import asyncio
 from database.models import AsyncSessionLocal, CustomEmoji
 from sqlalchemy import select
 
+# Use absolute paths for all file operations
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+
 _emoji_cache = None
 _mapping_cache = None
 
@@ -13,7 +17,7 @@ def load_mapping():
     if _mapping_cache is not None:
         return _mapping_cache
 
-    mapping_path = "utils/emoji_mapping.json"
+    mapping_path = os.path.join(BASE_DIR, "emoji_mapping.json")
     if os.path.exists(mapping_path):
         try:
             with open(mapping_path, "r") as f:
@@ -23,10 +27,16 @@ def load_mapping():
             logging.error(f"Error loading emoji mapping: {e}")
     return {}
 
-def scan_emojis(base_paths=["emojis", "imoji/emojis"]):
+def scan_emojis(base_paths=None):
     global _emoji_cache
     if _emoji_cache is not None:
         return _emoji_cache
+
+    if base_paths is None:
+        base_paths = [
+            os.path.join(PROJECT_ROOT, "emojis"),
+            os.path.join(PROJECT_ROOT, "imoji", "emojis")
+        ]
 
     groups = {}
     mapping = load_mapping()
