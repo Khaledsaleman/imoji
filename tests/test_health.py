@@ -54,3 +54,14 @@ async def test_health_check_database_error():
 
         assert exc_info.value.status_code == 500
         assert "error" in exc_info.value.detail["database"]
+
+def test_webapp_static_mount():
+    import os
+    from webapp.router import app, STATIC_DIR
+
+    assert os.path.exists(STATIC_DIR)
+    assert os.path.isabs(STATIC_DIR)
+
+    # Check if /static route is mounted in FastAPI app
+    static_routes = [r for r in app.routes if getattr(r, "name", None) == "static"]
+    assert len(static_routes) > 0

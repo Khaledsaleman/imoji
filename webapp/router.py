@@ -16,8 +16,8 @@ import logging
 
 # Ensure static and templates directories exist using absolute paths to prevent Render errors
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.abspath(os.path.join(BASE_DIR, "static"))
+TEMPLATES_DIR = os.path.abspath(os.path.join(BASE_DIR, "templates"))
 
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
