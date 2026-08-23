@@ -1,7 +1,16 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from webapp.router import health_check
+from webapp.router import health_check, app, STATIC_DIR, TEMPLATES_DIR
 from fastapi import HTTPException
+import os
+
+def test_app_mount_static_and_templates():
+    assert app is not None
+    assert os.path.exists(STATIC_DIR)
+    assert os.path.exists(TEMPLATES_DIR)
+    # Check that static mount is present on FastAPI app
+    routes = [r.path for r in app.routes]
+    assert "/static" in routes
 
 @pytest.mark.asyncio
 async def test_health_check_ok():
