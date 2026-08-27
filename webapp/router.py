@@ -23,7 +23,7 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR, check_dir=False), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Lazy bot initialization
